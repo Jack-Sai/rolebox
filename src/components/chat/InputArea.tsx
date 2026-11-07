@@ -1,6 +1,11 @@
-import { useState, type FormEvent } from "react";
+import {
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { Quote, Send, Square } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { matchShortcut } from "../../lib/shortcuts";
 import { Button } from "../ui/button";
 
 interface InputAreaProps {
@@ -22,8 +27,7 @@ export function InputArea({
   // 旁白模式只影响发送走哪条命令，不改变输入框内容。
   const [narration, setNarration] = useState(false);
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = () => {
     const text = value.trim();
     if (!text || disabled || streaming) return;
     if (narration && onSendNarration) {
@@ -34,6 +38,22 @@ export function InputArea({
     setValue("");
   };
 
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    submit();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const action = matchShortcut(event);
+    if (action === "send") {
+      event.preventDefault();
+      submit();
+    } else if (action === "stop" && streaming) {
+      event.preventDefault();
+      onStop?.();
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="flex items-end gap-2">
       <div className="min-w-0 flex-1 space-y-1">
@@ -42,6 +62,7 @@ export function InputArea({
           rows={2}
           value={value}
           onChange={(event) => setValue(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={narration ? "输入旁白…" : "输入消息…"}
           className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
         />

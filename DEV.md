@@ -226,6 +226,8 @@ DESIGN 8.1 只定义了单人版 `Done { message: Message }`，两种消息类�
   复用 `MessageBubble` / `NarrationLine` / `SummaryCard`，assistant 消息上方单独标发言人名字。
   生成按成员逐个触发（`generateGroupReply`），`StreamEvent` 的 `done_group` 由 handler 的
   `onDoneGroup` 接管；`never` 穷尽检查会强制在新增变体时补 case。
+- `lib/shortcuts.ts`（C41）：`matchShortcut` 纯函数，Ctrl/Cmd+Enter 发送、Esc 停止；
+  普通 Enter 必须留给换行，所以 send 一定要求修饰键。
 - `lib/stream.ts`：`createStreamHandler` 分发七种 StreamEvent（含 `done_group`，default 用 `never` 做穷尽检查）；
   `mergeText` 只在末尾是文本块时合并，`flushBuffer` 在插入非文本块前排空缓冲（坑 #5）。
   ChatPage 用 `id = -1` 的临时消息逐字追加，`Done` 换成真实 id；`Cancelled` 保留已生成内容，
