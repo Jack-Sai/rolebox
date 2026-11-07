@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { truncate } from "../lib/utils";
 import { Button } from "../components/ui/button";
@@ -28,6 +29,35 @@ export function CharacterListPage() {
     void load();
   }, [load]);
 
+  const handleImport = async () => {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (typeof selected !== "string") return;
+    try {
+      await api.importCharacter(selected, "new");
+      await load();
+      show("角色已导入");
+    } catch (cause) {
+      show(`导入失败：${String(cause)}`);
+    }
+  };
+
+  const handleExport = async (character: Character) => {
+    const target = await save({
+      defaultPath: `${character.name}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!target) return;
+    try {
+      await api.exportCharacter(character.id, target);
+      show("角色已导出");
+    } catch (cause) {
+      show(`导出失败：${String(cause)}`);
+    }
+  };
+
   const handleDelete = async (character: Character) => {
     if (
       !window.confirm(
@@ -52,12 +82,18 @@ export function CharacterListPage() {
           <h1 className="text-xl font-semibold">角色</h1>
           <p className="mt-1 text-sm text-gray-500">管理可参与对话的角色及其设定</p>
         </div>
-        <Link to="/characters/new">
-          <Button>
-            <Plus size={16} />
-            新建角色
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => void handleImport()}>
+            <Upload size={16} />
+            导入角色
           </Button>
-        </Link>
+          <Link to="/characters/new">
+            <Button>
+              <Plus size={16} />
+              新建角色
+            </Button>
+          </Link>
+        </div>
       </header>
 
       {loading && <p className="text-sm text-gray-500">加载中…</p>}
@@ -98,6 +134,13 @@ export function CharacterListPage() {
                   编辑
                 </Button>
               </Link>
+              <Button
+                variant="ghost"
+                onClick={() => void handleExport(character)}
+              >
+                <Download size={14} />
+                导出
+              </Button>
               <Button
                 variant="danger"
                 onClick={() => void handleDelete(character)}

@@ -1,4 +1,5 @@
 mod db;
+pub mod export;
 pub mod handlers;
 pub mod models;
 
@@ -25,6 +26,7 @@ pub struct AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             use tauri::Manager;
 
@@ -59,6 +61,8 @@ pub fn run() {
             handlers::create_persona,
             handlers::update_persona,
             handlers::delete_persona,
+            handlers::export_character,
+            handlers::import_character,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

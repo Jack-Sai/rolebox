@@ -10,7 +10,7 @@
 |---|---|---|---|
 | Rust edition | 2021 | 2024 | 保持现状不改，避免无谓改动 |
 | pnpm | 「最新稳定版」 | 12.5.1 | `pnpm-workspace.yaml` 的 `allowBuilds`（坑 #8）在 v12 仍有效 |
-| 单角色 JSON 格式 | 引用「DESIGN 3.1.4」，正文未给出 | 无 | C09 按 5.8 备份格式自定，见第 5 节 |
+| 单角色 JSON 格式 | 引用「DESIGN 3.1.4」，正文未给出 | 已自定 | 按 5.8 备份格式 `version` / `type` / `exported_at` / `character`，见第 5 节 |
 | Input / Update 输入类型 | 5.6 只出现在函数签名，未给字段 | 无 | C03 按表结构补全，见第 4 节 |
 | 额外依赖 | 未列 | `tauri-plugin-dialog`（C09）、`zip`（C44） | 命令签名收 `path: String` 与整体备份 zip 所必需 |
 | sqlx features | `runtime-tokio, sqlite, macros` | 未启用 `macros` | 代码一律用运行时 `query()`；干净环境无 `DATABASE_URL`，启用宏会让 `query!` 编译失败 |
@@ -60,6 +60,8 @@
   （`CharacterInput` / `UserPersonaInput` / `SessionInput` / `SessionUpdate`，DESIGN 5.6 未给字段，
   按表「除 id / 时间戳外的列」补全）、`StreamEvent` 6 变体、`ContextInfo`。
   群聊输入类型、`ConnectionInfo`、`ImportStats` 留到各自首次使用处定义。
+- `export.rs`：单角色 JSON 的编解码纯函数 + 文件读写；`encode_character` /
+  `decode_character` 不碰文件系统，便于验证格式与一致性。
 - 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。
 
 ## 5. Tauri 命令语义
@@ -78,7 +80,24 @@
 | `update_persona` | `id, input` | `()` | 覆盖 name / persona |
 | `delete_persona` | `id` | `()` | 关联会话 `user_persona_id` 置 NULL |
 
+| `export_character` | `id, path` | `()` | 读角色 → 写单角色 JSON 文件 |
+| `import_character` | `path, mode` | `Character` | 读 JSON → 新建角色 |
+
 命令层只做转发，不做业务判断；统一 `Result<T, String>`。
+
+**单角色 JSON**（DESIGN 11.1 引用 3.1.4 但正文缺失，按 5.8 备份格式自定）：
+
+```json
+{
+  "version": 1,
+  "type": "rolebox.character",
+  "exported_at": "2026-11-07T08:00:00+08:00",
+  "character": { "name": "...", "tagline": "...", "persona": "...", "avatar_color": "..." }
+}
+```
+
+导入校验 `type` 与 `version`；`mode` 目前只接受 `new`（总是新建角色），覆盖 / 合并模式明确不做。
+文件路径由前端 `tauri-plugin-dialog` 选择，后端只收字符串。
 
 **命令注册完整性**（坑 #15）：`lib.rs` 的 `command_registry_tests::every_tauri_command_is_registered`
 用 `include_str!` 扫描 `handlers.rs` 中所有 `#[tauri::command]` 函数名，
@@ -101,7 +120,8 @@
 - `lib/avatar.ts`（姓名 → 稳定颜色）、`lib/utils.ts`（`cn` / `truncate`）、
   `lib/prompt.ts`（system prompt 只读预览，必须与后端 `prompt.rs` 逐字一致）
   均为纯逻辑并配单测。
-- `pages/CharacterListPage.tsx`：列表 / 删除 / 空状态；删除会级联清掉会话，故二次确认。
+- `pages/CharacterListPage.tsx`：列表 / 删除 / 空状态 / 角色 JSON 导入导出
+  （用 `@tauri-apps/plugin-dialog` 选路径）；删除会级联清掉会话，故二次确认。
 - `pages/CharacterEditPage.tsx`：新建 / 编辑表单 + 右侧预览；后端没有单角色查询命令，
   编辑时复用 `get_characters` 按 id 取回。
 - `store/toast.ts`：Zustand 全局提示；`components/ui/` 为自写基础组件，图标一律 lucide-react。

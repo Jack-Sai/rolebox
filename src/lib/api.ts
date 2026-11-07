@@ -28,4 +28,10 @@ export const api = {
     invoke<void>("update_persona", { id, input }),
 
   deletePersona: (id: number) => invoke<void>("delete_persona", { id }),
+
+  exportCharacter: (id: number, path: string) =>
+    invoke<void>("export_character", { id, path }),
+
+  importCharacter: (path: string, mode: string) =>
+    invoke<Character>("import_character", { path, mode }),
 };

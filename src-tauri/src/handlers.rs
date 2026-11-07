@@ -3,6 +3,7 @@
 // 因此 lib.rs 的 command_registry_tests 会静态扫描本文件核对注册列表。
 
 use crate::db;
+use crate::export;
 use crate::models::{Character, CharacterInput, UserPersona, UserPersonaInput};
 use crate::AppState;
 use tauri::State;
@@ -66,4 +67,22 @@ pub async fn update_persona(
 #[tauri::command]
 pub async fn delete_persona(state: State<'_, AppState>, id: i64) -> Result<(), String> {
     db::delete_persona(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn export_character(
+    state: State<'_, AppState>,
+    id: i64,
+    path: String,
+) -> Result<(), String> {
+    export::export_character(&state.pool, id, &path).await
+}
+
+#[tauri::command]
+pub async fn import_character(
+    state: State<'_, AppState>,
+    path: String,
+    mode: String,
+) -> Result<Character, String> {
+    export::import_character(&state.pool, &path, &mode).await
 }
