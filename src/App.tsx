@@ -4,6 +4,9 @@ import { Toaster } from "./components/Toaster";
 import { CharacterEditPage } from "./pages/CharacterEditPage";
 import { CharacterListPage } from "./pages/CharacterListPage";
 import { ChatPage } from "./pages/ChatPage";
+import { GroupChatPage } from "./pages/GroupChatPage";
+import { GroupCreatePage } from "./pages/GroupCreatePage";
+import { GroupListPage } from "./pages/GroupListPage";
 import { SessionCreatePage } from "./pages/SessionCreatePage";
 import { SessionListPage } from "./pages/SessionListPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -25,6 +28,9 @@ export default function App() {
               element={<SessionCreatePage />}
             />
             <Route path="/sessions/:id" element={<ChatPage />} />
+            <Route path="/groups" element={<GroupListPage />} />
+            <Route path="/groups/new" element={<GroupCreatePage />} />
+            <Route path="/groups/:id" element={<GroupChatPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/characters" replace />} />
           </Routes>

@@ -5,7 +5,7 @@ import {
   insertBlock,
   mergeText,
 } from "./stream";
-import type { Message, StreamEvent } from "../types";
+import type { GroupMessage, Message, StreamEvent } from "../types";
 
 const doneMessage: Message = {
   id: 7,
@@ -49,6 +49,32 @@ describe("createStreamHandler", () => {
     expect(callbacks.onDone).toHaveBeenCalledWith(doneMessage);
     expect(callbacks.onError).toHaveBeenCalledWith("出错");
     expect(callbacks.onCancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it("done_group 事件分发给 onDoneGroup", () => {
+    const onDoneGroup = vi.fn();
+    const handler = createStreamHandler({
+      onAppend: vi.fn(),
+      onDone: vi.fn(),
+      onDoneGroup,
+      onError: vi.fn(),
+    });
+    const groupMessage: GroupMessage = {
+      id: 9,
+      group_id: 2,
+      character_id: 3,
+      role: "assistant",
+      content: "你好",
+      version_group: 9,
+      is_active: true,
+      deprecated: false,
+      summarized: false,
+      created_at: "2026-11-07 00:00:00",
+    };
+
+    handler({ type: "done_group", message: groupMessage });
+
+    expect(onDoneGroup).toHaveBeenCalledWith(groupMessage);
   });
 
   it("未知事件被忽略而不抛错", () => {

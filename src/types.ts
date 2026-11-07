@@ -66,6 +66,13 @@ export interface GroupSession {
   updated_at: string;
 }
 
+export interface GroupSessionInput {
+  title: string;
+  scenario: string;
+  user_persona_id: number | null;
+  character_ids: number[];
+}
+
 export interface GroupMember {
   character_id: number;
   sort_order: number;
@@ -92,6 +99,8 @@ export type StreamEvent =
   | { type: "delta"; content: string }
   | { type: "usage"; promptTokens: number; completionTokens: number }
   | { type: "done"; message: Message }
+  // 群聊的收尾事件：消息带 character_id，无法复用单人的 done 字段。
+  | { type: "done_group"; message: GroupMessage }
   | { type: "error"; message: string }
   | { type: "cancelled" };
 

@@ -1,4 +1,4 @@
-import type { Message, StreamEvent } from "../types";
+import type { GroupMessage, Message, StreamEvent } from "../types";
 
 export interface StreamBlock {
   kind: "text" | "note";
@@ -13,6 +13,7 @@ export interface StreamHandlerOptions {
     completionTokens: number;
   }) => void;
   onDone: (message: Message) => void;
+  onDoneGroup?: (message: GroupMessage) => void;
   onError: (message: string) => void;
   onCancelled?: () => void;
 }
@@ -66,6 +67,9 @@ export function createStreamHandler(
         break;
       case "done":
         options.onDone(event.message);
+        break;
+      case "done_group":
+        options.onDoneGroup?.(event.message);
         break;
       case "error":
         options.onError(event.message);

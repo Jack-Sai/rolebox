@@ -214,7 +214,11 @@ DESIGN 8.1 只定义了单人版 `Done { message: Message }`，两种消息类�
   确认弹窗与重新加载留在 `ChatPage`；临时消息（id < 0）不显示编辑/删除；复制走 `navigator.clipboard`。
 - `components/chat/ContextBar.tsx`：上下文进度条，≥70% 转琥珀、≥90% 转红；`limit = 0` 时退回 0%，
   不产生 NaN；`isAccurate = false` 时在文字后标「（估算）」。`ChatPage` 在加载消息与生成结束后各刷新一次。
-- `lib/stream.ts`：`createStreamHandler` 分发六种 StreamEvent（default 用 `never` 做穷尽检查）；
+- 群聊页面（C36）：`GroupListPage` / `GroupCreatePage` / `GroupChatPage`。群聊消息用 `asMessage` 适配后
+  复用 `MessageBubble` / `NarrationLine` / `SummaryCard`，assistant 消息上方单独标发言人名字。
+  生成按成员逐个触发（`generateGroupReply`），`StreamEvent` 的 `done_group` 由 handler 的
+  `onDoneGroup` 接管；`never` 穷尽检查会强制在新增变体时补 case。
+- `lib/stream.ts`：`createStreamHandler` 分发七种 StreamEvent（含 `done_group`，default 用 `never` 做穷尽检查）；
   `mergeText` 只在末尾是文本块时合并，`flushBuffer` 在插入非文本块前排空缓冲（坑 #5）。
   ChatPage 用 `id = -1` 的临时消息逐字追加，`Done` 换成真实 id；`Cancelled` 保留已生成内容，
   并用命令返回值补齐后端落库后的真实 id。流式期间 InputArea 的发送按钮变「停止」，调 `cancel_generation`。

@@ -3,6 +3,10 @@ import type {
   Character,
   CharacterInput,
   ContextInfo,
+  GroupMember,
+  GroupMessage,
+  GroupSession,
+  GroupSessionInput,
   Message,
   Session,
   SessionInput,
@@ -86,6 +90,43 @@ export const api = {
     const channel = new Channel<StreamEvent>();
     channel.onmessage = onChunk;
     return invoke<Message>("regenerate_message", { messageId, onChunk: channel });
+  },
+
+  getGroupSessions: () => invoke<GroupSession[]>("get_group_sessions"),
+
+  createGroupSession: (input: GroupSessionInput) =>
+    invoke<GroupSession>("create_group_session", { input }),
+
+  deleteGroupSession: (id: number) =>
+    invoke<void>("delete_group_session", { id }),
+
+  getGroupMembers: (groupId: number) =>
+    invoke<GroupMember[]>("get_group_members", { groupId }),
+
+  getGroupMessages: (groupId: number) =>
+    invoke<GroupMessage[]>("get_group_messages", { groupId }),
+
+  sendGroupUserMessage: (groupId: number, content: string) =>
+    invoke<GroupMessage>("send_group_user_message", { groupId, content }),
+
+  sendGroupNarration: (groupId: number, content: string) =>
+    invoke<GroupMessage>("send_group_narration", { groupId, content }),
+
+  cancelGroupGeneration: (groupId: number) =>
+    invoke<void>("cancel_group_generation", { groupId }),
+
+  generateGroupReply: async (
+    groupId: number,
+    characterId: number,
+    onChunk: (event: StreamEvent) => void,
+  ): Promise<GroupMessage> => {
+    const channel = new Channel<StreamEvent>();
+    channel.onmessage = onChunk;
+    return invoke<GroupMessage>("generate_group_reply", {
+      groupId,
+      characterId,
+      onChunk: channel,
+    });
   },
 
   generateReply: async (
