@@ -34,4 +34,18 @@ describe("MessageList", () => {
     expect(screen.getByTestId("bubble-1")).toBeTruthy();
     expect(screen.getByText("你好")).toBeTruthy();
   });
+
+  it("旁白消息渲染为 NarrationLine 而不是普通气泡", () => {
+    const narration = {
+      ...base,
+      id: 2,
+      role: "narration" as const,
+      content: "窗外下雨了",
+    };
+    render(<MessageList messages={[narration]} />);
+
+    expect(screen.getByTestId("narration-line")).toBeTruthy();
+    expect(screen.getByText(/窗外下雨了/)).toBeTruthy();
+    expect(screen.queryByTestId("bubble-2")).toBeNull();
+  });
 });

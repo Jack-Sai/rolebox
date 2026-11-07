@@ -1,4 +1,5 @@
 import { defaultRenderContent, MessageBubble } from "./MessageBubble";
+import { NarrationLine } from "./NarrationLine";
 import type { Message } from "../../types";
 
 export interface MessageListProps {
@@ -23,9 +24,11 @@ export function MessageList({
       {messages.map((message) => {
         // 坑 #4：switch 必须有 default，否则新增 BlockKind 会静默不渲染。
         switch (message.role) {
+          case "narration":
+            // 旁白不是对话气泡，用居中斜体行区分。
+            return <NarrationLine key={message.id} content={message.content} />;
           case "user":
           case "assistant":
-          case "narration":
           case "summary":
             // renderContent 传模块级函数，不用内联箭头（坑 #12 / #13）。
             return (
