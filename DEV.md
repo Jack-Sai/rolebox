@@ -75,6 +75,9 @@
 - `stream.rs`：`SseEvent` = Delta / Usage / Done；`parse_sse_line` 对非标准帧返回 None 不 panic，
   **先取 usage 再取 delta**（坑 #19 的 `choices: []` 帧）；`process_sse_line` 每个 Delta
   后检查 cancel，抽成纯函数以便不启 server 就能测取消。
+- 群聊数据层（C33）：`group_sessions` / `group_members` / `group_messages` 三表。
+  建群与写成员**同一事务**（否则可能留下没有成员的群）；成员展示用的 `name` / `avatar_color`
+  通过 JOIN `characters` 取，不冗余存储；`group_messages` 同样按 `version_group, id` 排序。
 - `export.rs`：单角色 JSON 的编解码纯函数 + 文件读写；`encode_character` /
   `decode_character` 不碰文件系统，便于验证格式与一致性。
 - 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。

@@ -1,5 +1,6 @@
 use crate::models::{
-    Character, CharacterInput, Message, Session, SessionInput, UserPersona, UserPersonaInput,
+    Character, CharacterInput, GroupMember, GroupMessage, GroupSession, GroupSessionInput, Message,
+    Session, SessionInput, UserPersona, UserPersonaInput,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow};
 use sqlx::{Row, SqlitePool};
@@ -596,6 +597,193 @@ pub async fn atomic_summarize(
         .map_err(|e| format!("提交事务失败：{e}"))?;
 
     get_message(pool, id).await
+}
+
+fn group_session_from_row(row: &SqliteRow) -> Result<GroupSession, String> {
+    Ok(GroupSession {
+        id: row.try_get("id").map_err(|e| e.to_string())?,
+        title: row.try_get("title").map_err(|e| e.to_string())?,
+        scenario: row.try_get("scenario").map_err(|e| e.to_string())?,
+        user_persona_id: row.try_get("user_persona_id").map_err(|e| e.to_string())?,
+        created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
+        updated_at: row.try_get("updated_at").map_err(|e| e.to_string())?,
+    })
+}
+
+fn group_message_from_row(row: &SqliteRow) -> Result<GroupMessage, String> {
+    let is_active: i64 = row.try_get("is_active").map_err(|e| e.to_string())?;
+    let deprecated: i64 = row.try_get("deprecated").map_err(|e| e.to_string())?;
+    let summarized: i64 = row.try_get("summarized").map_err(|e| e.to_string())?;
+    Ok(GroupMessage {
+        id: row.try_get("id").map_err(|e| e.to_string())?,
+        group_id: row.try_get("group_id").map_err(|e| e.to_string())?,
+        character_id: row.try_get("character_id").map_err(|e| e.to_string())?,
+        role: row.try_get("role").map_err(|e| e.to_string())?,
+        content: row.try_get("content").map_err(|e| e.to_string())?,
+        version_group: row.try_get("version_group").map_err(|e| e.to_string())?,
+        is_active: is_active != 0,
+        deprecated: deprecated != 0,
+        summarized: summarized != 0,
+        created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
+    })
+}
+
+const GROUP_SESSION_COLUMNS: &str =
+    "id, title, scenario, user_persona_id, created_at, updated_at";
+const GROUP_MESSAGE_COLUMNS: &str = "id, group_id, character_id, role, content, version_group, is_active, deprecated, summarized, created_at";
+
+pub async fn list_group_sessions(pool: &SqlitePool) -> Result<Vec<GroupSession>, String> {
+    let rows = sqlx::query(&format!(
+        "SELECT {GROUP_SESSION_COLUMNS} FROM group_sessions ORDER BY id"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询群聊失败：{e}"))?;
+    rows.iter().map(group_session_from_row).collect()
+}
+
+pub async fn get_group_session(pool: &SqlitePool, id: i64) -> Result<GroupSession, String> {
+    let row = sqlx::query(&format!(
+        "SELECT {GROUP_SESSION_COLUMNS} FROM group_sessions WHERE id = ?"
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("查询群聊失败：{e}"))?
+    .ok_or_else(|| format!("群聊 {id} 不存在"))?;
+    group_session_from_row(&row)
+}
+
+/// 建群和写成员必须同一事务：否则可能留下一个没有成员的群。
+pub async fn create_group_session(
+    pool: &SqlitePool,
+    input: &GroupSessionInput,
+) -> Result<GroupSession, String> {
+    if input.character_ids.is_empty() {
+        return Err("群聊至少需要一个角色".to_string());
+    }
+
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("开启事务失败：{e}"))?;
+    let result = sqlx::query(
+        "INSERT INTO group_sessions (title, scenario, user_persona_id) VALUES (?, ?, ?)",
+    )
+    .bind(&input.title)
+    .bind(&input.scenario)
+    .bind(input.user_persona_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("新增群聊失败：{e}"))?;
+    let id = result.last_insert_rowid();
+
+    for (index, character_id) in input.character_ids.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO group_members (group_id, character_id, sort_order) VALUES (?, ?, ?)",
+        )
+        .bind(id)
+        .bind(character_id)
+        .bind(index as i64)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("新增群成员失败：{e}"))?;
+    }
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("提交事务失败：{e}"))?;
+    get_group_session(pool, id).await
+}
+
+pub async fn delete_group_session(pool: &SqlitePool, id: i64) -> Result<(), String> {
+    sqlx::query("DELETE FROM group_sessions WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除群聊失败：{e}"))?;
+    Ok(())
+}
+
+/// 成员展示字段（名字 / 头像色）来自 characters 表，DB 里不冗余存储。
+pub async fn list_group_members(
+    pool: &SqlitePool,
+    group_id: i64,
+) -> Result<Vec<GroupMember>, String> {
+    let rows = sqlx::query(
+        "SELECT gm.character_id, gm.sort_order, c.name, c.avatar_color \
+         FROM group_members gm JOIN characters c ON c.id = gm.character_id \
+         WHERE gm.group_id = ? ORDER BY gm.sort_order, gm.id",
+    )
+    .bind(group_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询群成员失败：{e}"))?;
+
+    rows.iter()
+        .map(|row| {
+            Ok(GroupMember {
+                character_id: row.try_get("character_id").map_err(|e| e.to_string())?,
+                sort_order: row.try_get("sort_order").map_err(|e| e.to_string())?,
+                name: row.try_get("name").map_err(|e| e.to_string())?,
+                avatar_color: row.try_get("avatar_color").map_err(|e| e.to_string())?,
+            })
+        })
+        .collect()
+}
+
+/// 与单人一致：按 version_group 排序，重生成的新版本才能留在原位置（坑 #39）。
+pub async fn list_group_messages(
+    pool: &SqlitePool,
+    group_id: i64,
+) -> Result<Vec<GroupMessage>, String> {
+    let rows = sqlx::query(&format!(
+        "SELECT {GROUP_MESSAGE_COLUMNS} FROM group_messages \
+         WHERE group_id = ? AND is_active = 1 ORDER BY version_group, id"
+    ))
+    .bind(group_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询群消息失败：{e}"))?;
+    rows.iter().map(group_message_from_row).collect()
+}
+
+pub async fn get_group_message(pool: &SqlitePool, id: i64) -> Result<GroupMessage, String> {
+    let row = sqlx::query(&format!(
+        "SELECT {GROUP_MESSAGE_COLUMNS} FROM group_messages WHERE id = ?"
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("查询群消息失败：{e}"))?
+    .ok_or_else(|| format!("群消息 {id} 不存在"))?;
+    group_message_from_row(&row)
+}
+
+pub async fn insert_group_message(
+    pool: &SqlitePool,
+    group_id: i64,
+    character_id: Option<i64>,
+    role: &str,
+    content: &str,
+) -> Result<i64, String> {
+    let result = sqlx::query(
+        "INSERT INTO group_messages (group_id, character_id, role, content) VALUES (?, ?, ?, ?)",
+    )
+    .bind(group_id)
+    .bind(character_id)
+    .bind(role)
+    .bind(content)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("新增群消息失败：{e}"))?;
+    let id = result.last_insert_rowid();
+    sqlx::query("UPDATE group_messages SET version_group = id WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("回填版本组失败：{e}"))?;
+    Ok(id)
 }
 
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
@@ -1288,5 +1476,99 @@ mod tests {
             .unwrap();
 
         assert!(!get_message(&pool, third).await.unwrap().summarized);
+    }
+
+    fn group_input(title: &str, character_ids: Vec<i64>) -> GroupSessionInput {
+        GroupSessionInput {
+            title: title.into(),
+            scenario: "车站".into(),
+            user_persona_id: None,
+            character_ids,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_group_session_persists_members_in_given_order() {
+        let pool = seeded_pool().await;
+        let first = create_character(&pool, &character_input("甲")).await.unwrap();
+        let second = create_character(&pool, &character_input("乙")).await.unwrap();
+
+        let group = create_group_session(&pool, &group_input("三人行", vec![second.id, first.id]))
+            .await
+            .unwrap();
+        assert!(group.id > 0);
+        assert_eq!(group.title, "三人行");
+
+        let members = list_group_members(&pool, group.id).await.unwrap();
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[0].character_id, second.id);
+        assert_eq!(members[0].sort_order, 0);
+        assert_eq!(members[1].character_id, first.id);
+        assert_eq!(members[1].sort_order, 1);
+    }
+
+    #[tokio::test]
+    async fn list_group_members_joins_character_display_fields() {
+        let pool = seeded_pool().await;
+        let character = create_character(&pool, &character_input("甲")).await.unwrap();
+        let group = create_group_session(&pool, &group_input("两人", vec![character.id]))
+            .await
+            .unwrap();
+
+        let members = list_group_members(&pool, group.id).await.unwrap();
+        assert_eq!(members[0].name, "甲");
+        assert_eq!(members[0].avatar_color, character.avatar_color);
+    }
+
+    #[tokio::test]
+    async fn creating_group_without_members_is_rejected() {
+        let pool = seeded_pool().await;
+        assert!(create_group_session(&pool, &group_input("空的", vec![]))
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn deleting_group_cascades_members_and_messages() {
+        let pool = seeded_pool().await;
+        let character = create_character(&pool, &character_input("甲")).await.unwrap();
+        let group = create_group_session(&pool, &group_input("两人", vec![character.id]))
+            .await
+            .unwrap();
+        insert_group_message(&pool, group.id, None, "user", "你好")
+            .await
+            .unwrap();
+
+        delete_group_session(&pool, group.id).await.unwrap();
+
+        let members: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM group_members")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM group_messages")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(members, 0);
+        assert_eq!(messages, 0);
+    }
+
+    #[tokio::test]
+    async fn insert_group_message_backfills_version_group() {
+        let pool = seeded_pool().await;
+        let character = create_character(&pool, &character_input("甲")).await.unwrap();
+        let group = create_group_session(&pool, &group_input("两人", vec![character.id]))
+            .await
+            .unwrap();
+
+        let id = insert_group_message(&pool, group.id, Some(character.id), "assistant", "（点头）")
+            .await
+            .unwrap();
+        let message = get_group_message(&pool, id).await.unwrap();
+
+        assert_eq!(message.version_group, id);
+        assert_eq!(message.character_id, Some(character.id));
+        assert_eq!(message.role, "assistant");
+        assert!(message.is_active);
     }
 }

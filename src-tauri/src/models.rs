@@ -104,6 +104,15 @@ pub struct SessionInput {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct GroupSessionInput {
+    pub title: String,
+    pub scenario: String,
+    pub user_persona_id: Option<i64>,
+    /// 成员顺序即 sort_order，成员创建后不可增删（DESIGN 3.5.2）。
+    pub character_ids: Vec<i64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionUpdate {
     pub title: String,
     pub scenario: String,
