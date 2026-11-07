@@ -117,6 +117,9 @@
 | `activate_message_version` | `message_id` | `()` | 事务内整组清 0 再置目标为 1 |
 | `get_context_info` | `session_id` | `ContextInfo` | `used` 优先用上次请求的真实 `prompt_tokens`，否则按字符估算 |
 | `compress_context` | `session_id` | `()` | 保留最近 4 条，其余生成摘要并原子落库；也抢 `send_lock` |
+| `get_settings` | — | `AppConfig` | 内存里的当前配置 |
+| `set_server_url` | `url` | `()` | 去空白与结尾斜杠后同时写 DB 与内存；空地址拒绝 |
+| `test_connection` | — | `ConnectionInfo` | `/health` 通即成功，再尽力补模型名与 `n_ctx` |
 | `get_group_sessions` | — | `Vec<GroupSession>` | 按 id 升序 |
 | `create_group_session` | `input` | `GroupSession` | 建群与写成员同一事务；至少要一个角色 |
 | `delete_group_session` | `id` | `()` | 级联删除成员与消息 |

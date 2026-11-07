@@ -56,6 +56,20 @@ pub async fn fetch_model_name(client: &Client, base: &str) -> Result<String, Str
         .ok_or_else(|| "模型列表为空或格式异常".to_string())
 }
 
+/// 健康检查：GET /health，2xx 即通（DESIGN 5.3）。
+pub async fn health(client: &Client, base: &str) -> Result<(), String> {
+    let response = client
+        .get(format!("{base}/health"))
+        .send()
+        .await
+        .map_err(|e| format!("连接失败：{e}"))?;
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("服务返回 HTTP {}", response.status()))
+    }
+}
+
 /// llama.cpp 的 /props 把 n_ctx 放在 default_generation_settings 下；
 /// 不同版本也可能放在顶层，两者都兼容。抽成纯函数以便不起 server 就能测。
 pub fn parse_ctx_len(value: &Value) -> Option<u32> {

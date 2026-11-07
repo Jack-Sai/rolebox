@@ -11,6 +11,7 @@ use std::sync::{atomic::AtomicBool, Arc, RwLock};
 
 pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8080";
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AppConfig {
     pub server_url: String,
 }
@@ -94,6 +95,9 @@ pub fn run() {
             handlers::send_group_narration,
             handlers::generate_group_reply,
             handlers::cancel_group_generation,
+            handlers::get_settings,
+            handlers::set_server_url,
+            handlers::test_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

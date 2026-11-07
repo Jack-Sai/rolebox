@@ -135,6 +135,15 @@ pub enum StreamEvent {
     Cancelled,
 }
 
+/// 连接测试结果（前端 types.ts 用 camelCase）。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionInfo {
+    pub ok: bool,
+    pub model: String,
+    pub ctx_length: u32,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextInfo {

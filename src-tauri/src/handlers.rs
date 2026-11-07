@@ -5,14 +5,14 @@
 use crate::db;
 use crate::export;
 use crate::models::{
-    Character, CharacterInput, ContextInfo, GroupMember, GroupMessage, GroupSession,
+    Character, CharacterInput, ConnectionInfo, ContextInfo, GroupMember, GroupMessage, GroupSession,
     GroupSessionInput, Message, Session, SessionInput, StreamEvent, UserPersona, UserPersonaInput,
 };
 use std::collections::HashMap;
 use crate::prompt;
 use crate::provider;
 use crate::stream::Usage;
-use crate::AppState;
+use crate::{AppConfig, AppState};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::ipc::Channel;
@@ -330,6 +330,63 @@ pub async fn compress_context(
 
     db::atomic_summarize(&state.pool, session_id, &summary, before_id).await?;
     Ok(())
+}
+
+/// 规范化服务器地址：去空白、去结尾斜杠；只剩斜杠或空串直接拒绝。
+pub fn normalize_server_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim().trim_end_matches('/').to_string();
+    if trimmed.is_empty() {
+        return Err("服务器地址不能为空".to_string());
+    }
+    Ok(trimmed)
+}
+
+#[tauri::command]
+pub async fn get_settings(state: State<'_, AppState>) -> Result<AppConfig, String> {
+    let config = state
+        .config
+        .read()
+        .map_err(|_| "读取配置失败".to_string())?;
+    Ok(AppConfig {
+        server_url: config.server_url.clone(),
+    })
+}
+
+#[tauri::command]
+pub async fn set_server_url(state: State<'_, AppState>, url: String) -> Result<(), String> {
+    let normalized = normalize_server_url(&url)?;
+    db::set_setting(&state.pool, "server_url", &normalized).await?;
+    let mut config = state
+        .config
+        .write()
+        .map_err(|_| "写入配置失败".to_string())?;
+    config.server_url = normalized;
+    Ok(())
+}
+
+/// 连接测试：/health 通就算成功，再尽力补上模型名与上下文长度。
+#[tauri::command]
+pub async fn test_connection(state: State<'_, AppState>) -> Result<ConnectionInfo, String> {
+    let base = state
+        .config
+        .read()
+        .map_err(|_| "读取配置失败".to_string())?
+        .server_url
+        .clone();
+
+    provider::health(&state.http, &base).await?;
+    let model = provider::fetch_model_name(&state.http, &base)
+        .await
+        .unwrap_or_else(|_| "未知模型".to_string());
+    let ctx_length = provider::fetch_ctx_len(&state.http, &base)
+        .await
+        .unwrap_or(0);
+
+    Ok(ConnectionInfo {
+        ok: true,
+        model,
+        ctx_length,
+    })
 }
 
 /// 群聊取消键：与单人的 `s:<id>` 共用一个 DashMap，前缀必须区分（DESIGN 坑 #25 同源）。
@@ -771,7 +828,7 @@ async fn regenerate_inner(
 
 #[cfg(test)]
 mod tests {
-    use super::{cancel_key, estimate_tokens, group_cancel_key};
+    use super::{cancel_key, estimate_tokens, group_cancel_key, normalize_server_url};
     use crate::models::Message;
 
     fn message(content: &str) -> Message {
@@ -807,6 +864,20 @@ mod tests {
         assert_eq!(cancel_key(7), "s:7");
         assert!(cancel_key(7).starts_with("s:"));
         assert!(!cancel_key(7).starts_with("g:"));
+    }
+
+    #[test]
+    fn normalize_server_url_trims_whitespace_and_trailing_slashes() {
+        assert_eq!(
+            normalize_server_url("  http://127.0.0.1:8080/  ").unwrap(),
+            "http://127.0.0.1:8080"
+        );
+        assert_eq!(
+            normalize_server_url("http://host:8080///").unwrap(),
+            "http://host:8080"
+        );
+        assert!(normalize_server_url("   ").is_err());
+        assert!(normalize_server_url("/").is_err());
     }
 
     #[test]

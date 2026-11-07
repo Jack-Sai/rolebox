@@ -786,6 +786,19 @@ pub async fn insert_group_message(
     Ok(id)
 }
 
+pub async fn set_setting(pool: &SqlitePool, key: &str, value: &str) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES (?, ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("写入设置失败：{e}"))?;
+    Ok(())
+}
+
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
     sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
         .bind(key)
@@ -1570,5 +1583,17 @@ mod tests {
         assert_eq!(message.character_id, Some(character.id));
         assert_eq!(message.role, "assistant");
         assert!(message.is_active);
+    }
+
+    #[tokio::test]
+    async fn set_setting_upserts_existing_key() {
+        let pool = seeded_pool().await;
+        set_setting(&pool, "server_url", "http://a").await.unwrap();
+        set_setting(&pool, "server_url", "http://b").await.unwrap();
+
+        assert_eq!(
+            get_setting(&pool, "server_url").await.unwrap().as_deref(),
+            Some("http://b")
+        );
     }
 }
