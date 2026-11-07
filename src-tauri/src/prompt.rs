@@ -103,6 +103,29 @@ pub fn format_single_history(
     result
 }
 
+/// 摘要 prompt（DESIGN 5.5.7）。入参是 (显示名, 内容) —— 调用方负责把
+/// assistant 映射成角色名、narration 映射成「旁白」，这样摘要也能看懂谁说了什么。
+pub const SUMMARY_SYSTEM_PROMPT: &str = "你是一个对话摘要助手。请将以下对话压缩成 200 字以内的摘要，保留关键剧情、人物关系变化、重要设定。只输出摘要正文，不要任何前言。";
+
+pub fn build_summary_prompt(messages: &[(String, String)]) -> Vec<ChatMessage> {
+    let body = messages
+        .iter()
+        .map(|(name, content)| format!("[{name}]: {content}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    vec![
+        ChatMessage {
+            role: "system".into(),
+            content: SUMMARY_SYSTEM_PROMPT.to_string(),
+        },
+        ChatMessage {
+            role: "user".into(),
+            content: body,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,5 +297,31 @@ mod tests {
                 .unwrap();
 
         assert_eq!(first.as_bytes(), second.as_bytes());
+    }
+
+    #[test]
+    fn summary_prompt_has_system_instruction_and_prefixed_body() {
+        let prompt = build_summary_prompt(&[
+            ("甲".into(), "你好".into()),
+            ("旁白".into(), "下雨了".into()),
+        ]);
+
+        assert_eq!(prompt.len(), 2);
+        assert_eq!(prompt[0].role, "system");
+        assert_eq!(prompt[0].content, SUMMARY_SYSTEM_PROMPT);
+        assert_eq!(prompt[1].role, "user");
+        assert_eq!(prompt[1].content, "[甲]: 你好\n[旁白]: 下雨了");
+    }
+
+    #[test]
+    fn summary_prompt_keeps_input_order_and_tolerates_empty() {
+        let empty = build_summary_prompt(&[]);
+        assert_eq!(empty[1].content, "");
+
+        let ordered = build_summary_prompt(&[
+            ("乙".into(), "二".into()),
+            ("甲".into(), "一".into()),
+        ]);
+        assert!(ordered[1].content.starts_with("[乙]: 二"));
     }
 }
