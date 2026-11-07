@@ -1,0 +1,4 @@
+# dev.md 坑 #8：pnpm v11+ 用 allowBuilds，不是 onlyBuiltDependencies。
+# esbuild 未构建会让 vitest 无法启动。
+allowBuilds:
+  esbuild: true
