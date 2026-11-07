@@ -1,5 +1,6 @@
 // 铁律二：请求体只允许 model / messages / stream / stream_options，
 // 采样参数全部由 llama-server 启动参数决定，客户端一个都不发。
+// chat_template_kwargs 不是采样参数，用于关闭 llama.cpp 推理模型的思考模式。
 pub use crate::prompt::ChatMessage;
 
 use crate::stream::{process_sse_line, LineOutcome, Usage};
@@ -9,31 +10,19 @@ use serde_json::Value;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-/// 关闭模型思考功能。不同系列模型的关闭方式不同：
-/// - Qwen3：`{"thinking": {"type": "disabled"}}`
-/// - DeepSeek-R1：llama.cpp 的 deepseek-r1 模板在 `think` 标签内输出思考，
-///   客户端层面同发 `{"thinking": {"type": "disabled"}}`，若 server 支持则生效；
-///   其余可通过 server 启动参数（`--chat-template` 选非思考模板）关闭。
-/// 思考开启会占用大量上下文且明显变慢，因此默认关闭。
-#[derive(Serialize, Clone, Debug)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Thinking {
-    Disabled,
-    Enabled { budget: Option<u32> },
-}
-
-impl Thinking {
-    /// 根据模型名选择默认的思考开关。qwen3 与 deepseek/r1 均默认关闭。
-    pub fn default_for_model(model: &str) -> Self {
-        let lower = model.to_lowercase();
-        if lower.contains("qwen3") {
-            return Thinking::Disabled;
-        }
-        if lower.contains("deepseek") || lower.contains("r1") {
-            return Thinking::Disabled;
-        }
-        Thinking::Disabled
-    }
+/// 判断是否应关闭模型思考模式（CoT）。
+///
+/// 自动检测：模型名命中 Qwen3/DeepSeek-R1 等推理模型时返回 true。
+/// 对于 llama.cpp 本地服务，通过 `chat_template_kwargs: {"enable_thinking": false}`
+/// 下发关闭指令，让模型直接输出正文，避免长时间思考占用上下文并降低速度。
+pub fn should_disable_thinking(model: &str) -> bool {
+    let m = model.to_lowercase();
+    m.contains("qwen3")
+        || m.contains("qwq")
+        || m.contains("deepseek-r1")
+        || m.contains("deepseek-reasoner")
+        || m.contains("reasoning")
+        || m.contains("thinking")
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -41,8 +30,10 @@ pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub stream: bool,
+    /// llama.cpp chat_template_kwargs：用于关闭 Qwen3 等推理模型的思考模式。
+    /// 仅在检测到推理模型时下发，值为 {"enable_thinking": false}。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub thinking: Option<Thinking>,
+    pub chat_template_kwargs: Option<Value>,
     /// 最大输出 token 数。None 表示不限制（由 server 决定）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
@@ -62,8 +53,8 @@ pub fn build_request_body(req: &ChatRequest) -> Value {
         "stream_options".into(),
         serde_json::json!({ "include_usage": true }),
     );
-    if let Some(thinking) = &req.thinking {
-        body.insert("thinking".into(), serde_json::to_value(thinking).unwrap());
+    if let Some(kwargs) = &req.chat_template_kwargs {
+        body.insert("chat_template_kwargs".into(), serde_json::to_value(kwargs).unwrap());
     }
     if let Some(max_tokens) = req.max_tokens {
         body.insert("max_tokens".into(), Value::Number(max_tokens.into()));
@@ -196,7 +187,7 @@ mod tests {
                 content: "你好".into(),
             }],
             stream: true,
-            thinking: None,
+            chat_template_kwargs: None,
             max_tokens: None,
         }
     }
@@ -263,5 +254,36 @@ mod tests {
             parse_ctx_len(&serde_json::json!({ "default_generation_settings": {} })),
             None
         );
+    }
+
+    #[test]
+    fn should_disable_thinking_detects_reasoning_models() {
+        assert!(should_disable_thinking("Qwen3.8-9B-Chat"));
+        assert!(should_disable_thinking("DeepSeek-R1-Distill-Qwen-7B"));
+        assert!(should_disable_thinking("deepseek-reasoner"));
+        assert!(should_disable_thinking("qwq-32b"));
+        assert!(should_disable_thinking("reasoning-model"));
+        assert!(!should_disable_thinking("llama-3.1-8b"));
+        assert!(!should_disable_thinking("gemma-2-9b"));
+    }
+
+    #[test]
+    fn chat_template_kwargs_serializes_enable_thinking_false() {
+        let req = ChatRequest {
+            model: "Qwen3-8B".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "你好".into(),
+            }],
+            stream: true,
+            chat_template_kwargs: Some(serde_json::json!({ "enable_thinking": false })),
+            max_tokens: None,
+        };
+        let body = build_request_body(&req);
+        assert_eq!(
+            body["chat_template_kwargs"]["enable_thinking"],
+            false
+        );
+        assert!(body.get("thinking").is_none());
     }
 }

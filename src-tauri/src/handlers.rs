@@ -305,10 +305,11 @@ pub async fn compress_context(
         .await
         .unwrap_or_else(|_| "local-model".to_string());
 
-    let thinking = Some(provider::Thinking::default_for_model(&model));
     // 摘要不需要打字机效果，用闭包把全文收进 buffer 即可。
     let buffer = Arc::new(std::sync::Mutex::new(String::new()));
     let sink = buffer.clone();
+    let chat_template_kwargs =
+        provider::should_disable_thinking(&model).then(|| serde_json::json!({ "enable_thinking": false }));
     provider::chat_stream(
         &state.http,
         &base,
@@ -316,7 +317,7 @@ pub async fn compress_context(
             model,
             messages: prompt::build_summary_prompt(&pairs),
             stream: true,
-            thinking,
+            chat_template_kwargs,
             max_tokens: None,
         },
         Arc::new(AtomicBool::new(false)),
@@ -786,7 +787,10 @@ async fn stream_chat(
         });
     };
 
-    let thinking = Some(provider::Thinking::default_for_model(&model));
+    // 根据模型名自动关闭推理模型的思考模式（Qwen3/DeepSeek-R1 等），
+    // 通过 llama.cpp chat_template_kwargs 下发 enable_thinking=false，避免思考占用上下文并降低速度。
+    let chat_template_kwargs =
+        provider::should_disable_thinking(&model).then(|| serde_json::json!({ "enable_thinking": false }));
     let result = provider::chat_stream(
         &state.http,
         &base,
@@ -794,7 +798,7 @@ async fn stream_chat(
             model,
             messages: chat_messages,
             stream: true,
-            thinking,
+            chat_template_kwargs,
             max_tokens,
         },
         cancel.clone(),
