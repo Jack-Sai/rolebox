@@ -5,8 +5,8 @@
 use crate::db;
 use crate::export;
 use crate::models::{
-    Character, CharacterInput, Message, Session, SessionInput, StreamEvent, UserPersona,
-    UserPersonaInput,
+    Character, CharacterInput, ContextInfo, Message, Session, SessionInput, StreamEvent,
+    UserPersona, UserPersonaInput,
 };
 use crate::prompt;
 use crate::provider;
@@ -236,6 +236,45 @@ pub async fn activate_message_version(
     db::activate_version(&state.pool, message_id).await
 }
 
+/// 没有真实 usage 时的兜底估算：中文约 1 token/字、英文约 4 字符/token，
+/// 取 2 字符/token 折中；每条消息再加 4 个结构性开销（role / 分隔符）。
+pub fn estimate_tokens(messages: &[Message]) -> u32 {
+    messages
+        .iter()
+        .map(|message| (message.content.chars().count() as u32 / 2) + 4)
+        .sum()
+}
+
+/// 上下文用量。used 优先用最近一次请求的真实 prompt_tokens（isAccurate = true），
+/// 否则按字符数估算（isAccurate = false）。
+#[tauri::command]
+pub async fn get_context_info(
+    state: State<'_, AppState>,
+    session_id: i64,
+) -> Result<ContextInfo, String> {
+    let base = state
+        .config
+        .read()
+        .map_err(|_| "读取配置失败".to_string())?
+        .server_url
+        .clone();
+    // 拿不到 n_ctx 就回落 4096，保证进度条始终有分母。
+    let limit = provider::fetch_ctx_len(&state.http, &base)
+        .await
+        .unwrap_or(4096);
+    let messages = db::list_messages(&state.pool, session_id).await?;
+    let cached = state.last_usage.get(&session_id).map(|value| *value);
+    let (used, is_accurate) = match cached {
+        Some(tokens) => (tokens, true),
+        None => (estimate_tokens(&messages), false),
+    };
+    Ok(ContextInfo {
+        used,
+        limit,
+        is_accurate,
+    })
+}
+
 /// 触发生成。全局一把 send_lock：llama-server 单 slot，会话间并发会互相踩 KV cache。
 #[tauri::command]
 pub async fn generate_reply(
@@ -268,6 +307,7 @@ pub async fn generate_reply(
 /// 三个生成入口共用：拿模型名、发 Start、跑 SSE、返回 (流结果, 累积文本)。
 async fn stream_chat(
     state: &AppState,
+    session_id: i64,
     chat_messages: Vec<prompt::ChatMessage>,
     channel: Arc<Channel<StreamEvent>>,
     cancel: Arc<AtomicBool>,
@@ -292,7 +332,10 @@ async fn stream_chat(
         let _ = delta_channel.send(StreamEvent::Delta { content: text });
     };
     let usage_channel = channel.clone();
+    // 真实 usage 记进 AppState，上下文进度条优先用它（比按字符估算准）。
+    let last_usage = state.last_usage.clone();
     let on_usage = move |usage: Usage| {
+        last_usage.insert(session_id, usage.prompt_tokens);
         let _ = usage_channel.send(StreamEvent::Usage {
             prompt_tokens: usage.prompt_tokens,
             completion_tokens: usage.completion_tokens,
@@ -347,8 +390,14 @@ async fn generate_reply_inner(
 ) -> Result<Message, String> {
     let session = db::get_session(&state.pool, session_id).await?;
     let chat_messages = build_single_context(state, &session).await?;
-    let (stream_result, text) =
-        stream_chat(state, chat_messages, channel.clone(), cancel.clone()).await;
+    let (stream_result, text) = stream_chat(
+        state,
+        session_id,
+        chat_messages,
+        channel.clone(),
+        cancel.clone(),
+    )
+    .await;
     let cancelled = cancel.load(Ordering::SeqCst);
 
     // 取消后仍落库已生成部分（DESIGN 8.2）；完全没内容就不制造空消息。
@@ -406,8 +455,14 @@ async fn regenerate_inner(
     // 旧版本先下线，避免生成期间同一组两条同时 active。
     db::deactivate_group(&state.pool, target.version_group).await?;
 
-    let (stream_result, text) =
-        stream_chat(state, chat_messages, channel.clone(), cancel.clone()).await;
+    let (stream_result, text) = stream_chat(
+        state,
+        session.id,
+        chat_messages,
+        channel.clone(),
+        cancel.clone(),
+    )
+    .await;
     let cancelled = cancel.load(Ordering::SeqCst);
 
     let saved = if text.is_empty() {
@@ -447,7 +502,36 @@ async fn regenerate_inner(
 
 #[cfg(test)]
 mod tests {
-    use super::cancel_key;
+    use super::{cancel_key, estimate_tokens};
+    use crate::models::Message;
+
+    fn message(content: &str) -> Message {
+        Message {
+            id: 1,
+            session_id: 1,
+            role: "user".into(),
+            content: content.into(),
+            version_group: 1,
+            is_active: true,
+            deprecated: false,
+            summarized: false,
+            created_at: "2026-11-07 00:00:00".into(),
+        }
+    }
+
+    #[test]
+    fn estimate_tokens_adds_per_message_overhead() {
+        assert_eq!(estimate_tokens(&[]), 0);
+        // "你好" 两个字符 / 2 = 1，再加 4 的结构开销。
+        assert_eq!(estimate_tokens(&[message("你好")]), 5);
+    }
+
+    #[test]
+    fn estimate_tokens_grows_with_content_length() {
+        let short = estimate_tokens(&[message("短")]);
+        let long = estimate_tokens(&[message("这是一个很长很长的句子用来对比估算结果")]);
+        assert!(long > short);
+    }
 
     #[test]
     fn single_session_cancel_key_uses_s_prefix() {

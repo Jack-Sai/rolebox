@@ -112,6 +112,11 @@
 | `regenerate_message` | `message_id, onChunk` | `Message` | 重新生成：旧版本下线 → 用目标消息之前的历史生成 → 新版本沿用同 group |
 | `get_message_versions` | `message_id` | `Vec<Message>` | 返回该版本组全部版本，按 id 升序 |
 | `activate_message_version` | `message_id` | `()` | 事务内整组清 0 再置目标为 1 |
+| `get_context_info` | `session_id` | `ContextInfo` | `used` 优先用上次请求的真实 `prompt_tokens`，否则按字符估算 |
+
+`ContextInfo.isAccurate`：`used` 来自真实 usage 时为 `true`；按字符估算时为 `false`。
+`limit` 取 `/props` 的 `n_ctx`，拿不到回落 4096。真实 usage 在 `stream_chat` 的 on_usage 里
+写进 `AppState.last_usage`（内存缓存，重启后回到估算值）。
 
 `deprecated` 只是 UI 提示「这些消息生成时上下文已变」，**不参与上下文过滤**（DESIGN 4.2）。
 编辑 / 删除会破坏 KV cache 前缀，这是用户主动触发的破坏，可接受。

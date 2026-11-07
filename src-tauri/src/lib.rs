@@ -22,6 +22,8 @@ pub struct AppState {
     pub send_lock: tokio::sync::Mutex<()>,
     // key = "s:<session_id>" 或 "g:<group_id>"
     pub cancel_flags: DashMap<String, Arc<AtomicBool>>,
+    // 每会话最近一次请求的真实 prompt_tokens，供上下文进度条使用（C27）。
+    pub last_usage: Arc<DashMap<i64, u32>>,
     pub config: RwLock<AppConfig>,
 }
 
@@ -50,6 +52,7 @@ pub fn run() {
                 http: reqwest::Client::new(),
                 send_lock: tokio::sync::Mutex::new(()),
                 cancel_flags: DashMap::new(),
+                last_usage: Arc::new(DashMap::new()),
                 config: RwLock::new(AppConfig { server_url }),
             });
             Ok(())
@@ -80,6 +83,7 @@ pub fn run() {
             handlers::regenerate_message,
             handlers::get_message_versions,
             handlers::activate_message_version,
+            handlers::get_context_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
