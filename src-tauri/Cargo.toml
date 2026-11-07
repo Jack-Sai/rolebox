@@ -22,6 +22,11 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1", features = ["full"] }
+dashmap = "6"
+# 只访问本机 http://127.0.0.1:8080，不引 TLS 后端；stream 供 C12 的 SSE 使用。
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

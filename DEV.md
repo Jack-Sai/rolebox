@@ -13,6 +13,8 @@
 | 单角色 JSON 格式 | 引用「DESIGN 3.1.4」，正文未给出 | 无 | C09 按 5.8 备份格式自定，见第 5 节 |
 | Input / Update 输入类型 | 5.6 只出现在函数签名，未给字段 | 无 | C03 按表结构补全，见第 4 节 |
 | 额外依赖 | 未列 | `tauri-plugin-dialog`（C09）、`zip`（C44） | 命令签名收 `path: String` 与整体备份 zip 所必需 |
+| sqlx features | `runtime-tokio, sqlite, macros` | 未启用 `macros` | 代码一律用运行时 `query()`；干净环境无 `DATABASE_URL`，启用宏会让 `query!` 编译失败 |
+| 建表函数名 | 5.1 写 `db::init` | 实际为 `db::migrate()` | 统一用 `migrate()`，语义与坑 #7 一致 |
 
 ## 2. 目录结构
 
@@ -20,11 +22,37 @@
 
 ## 3. 数据库 Schema
 
-（待 C02 回填：8 张表、5 个索引、外键级联、WAL、幂等 `migrate()`）
+位置 `app_data_dir()/rolebox.db`（Windows `%APPDATA%\RoleBox\rolebox.db`）。
+`db::connect()` 配置 WAL、`foreign_keys = ON`、连接池 max 5；启动即执行 `db::migrate()`。
+
+8 张表（完整 DDL 见 `src-tauri/src/db.rs` 的 `SCHEMA_STATEMENTS`，逐字对应 DESIGN.md 4.1）：
+
+| 表 | 用途 | 关键约束 |
+|---|---|---|
+| `characters` | 角色 | 6 列 |
+| `user_personas` | 用户分身 | 4 列 |
+| `sessions` | 单人会话 | `character_id` CASCADE、`user_persona_id` SET NULL |
+| `messages` | 单人消息 | `role` CHECK 四值；`version_group` / `is_active` / `deprecated` / `summarized` |
+| `group_sessions` | 群聊 | `user_persona_id` SET NULL |
+| `group_members` | 群聊成员 | `UNIQUE(group_id, character_id)`，创建后不可增删 |
+| `group_messages` | 群聊消息 | `character_id` SET NULL |
+| `settings` | 全局设置 | key-value |
+
+5 个索引：`idx_sessions_character`、`idx_messages_session`、`idx_messages_group`、
+`idx_group_members_group`、`idx_group_messages_group`。
+
+**幂等**：所有建表/建索引语句都带 `IF NOT EXISTS`（坑 #7）。`column_exists()` 用
+`pragma_table_info` 判断列，`ensure_column()` 供后续版本补列；Phase 1 只有第一版 schema，
+**不做版本链**。覆盖安装只替换程序目录，数据库不受影响（坑 #32）。
 
 ## 4. Rust 模块与数据模型
 
-（待 C02 / C03 回填）
+- `lib.rs`：`AppConfig { server_url }`、`DEFAULT_SERVER_URL`、
+  `AppState { pool, http, send_lock, cancel_flags, config }`；setup 依次建目录 →
+  `db::connect` + `migrate` → 读 `settings.server_url` → `app.manage(state)`。
+- `db.rs`：`connect` / `migrate` / `column_exists` / `ensure_column` / `get_setting`，
+  纯函数收 `&SqlitePool`。
+- `models.rs`：待 C03 回填。
 
 ## 5. Tauri 命令语义
 
