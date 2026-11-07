@@ -50,8 +50,11 @@
 - `lib.rs`：`AppConfig { server_url }`、`DEFAULT_SERVER_URL`、
   `AppState { pool, http, send_lock, cancel_flags, config }`；setup 依次建目录 →
   `db::connect` + `migrate` → 读 `settings.server_url` → `app.manage(state)`。
-- `db.rs`：`connect` / `migrate` / `column_exists` / `ensure_column` / `get_setting`，
-  纯函数收 `&SqlitePool`。
+- `db.rs`：`connect` / `migrate` / `column_exists` / `ensure_column` / `get_setting` /
+  `list_characters` / `get_character` / `create_character` / `update_character` /
+  `delete_character` / `list_personas` / `create_persona` / `update_persona` /
+  `delete_persona`，纯函数收 `&SqlitePool`，统一 `Result<_, String>`。
+  行映射手写，不用 `FromRow` derive（未启用 sqlx `macros` feature）。
 - `models.rs`：7 个对外结构（`Character` / `UserPersona` / `Session` / `Message` /
   `GroupSession` / `GroupMember` / `GroupMessage`）、4 个输入类型
   （`CharacterInput` / `UserPersonaInput` / `SessionInput` / `SessionUpdate`，DESIGN 5.6 未给字段，

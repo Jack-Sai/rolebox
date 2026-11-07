@@ -1,5 +1,6 @@
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
-use sqlx::SqlitePool;
+use crate::models::{Character, CharacterInput, UserPersona, UserPersonaInput};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow};
+use sqlx::{Row, SqlitePool};
 use std::path::Path;
 
 /// 8 张表 + 5 个索引。全部 IF NOT EXISTS：覆盖安装不动 app_data_dir 下的数据库，
@@ -142,6 +143,144 @@ pub(crate) async fn ensure_column(
     Ok(())
 }
 
+// 不用 sqlx::FromRow derive：Cargo.toml 未启用 macros feature（干净环境无
+// DATABASE_URL 时 query! 会编译失败）。手动映射也便于统一把 INTEGER 转成 bool。
+fn character_from_row(row: &SqliteRow) -> Result<Character, String> {
+    Ok(Character {
+        id: row.try_get("id").map_err(|e| e.to_string())?,
+        name: row.try_get("name").map_err(|e| e.to_string())?,
+        tagline: row.try_get("tagline").map_err(|e| e.to_string())?,
+        persona: row.try_get("persona").map_err(|e| e.to_string())?,
+        avatar_color: row.try_get("avatar_color").map_err(|e| e.to_string())?,
+        created_at: row.try_get("created_at").map_err(|e| e.to_string())?,
+    })
+}
+
+fn persona_from_row(row: &SqliteRow) -> Result<UserPersona, String> {
+    Ok(UserPersona {
+        id: row.try_get("id").map_err(|e| e.to_string())?,
+        name: row.try_get("name").map_err(|e| e.to_string())?,
+        persona: row.try_get("persona").map_err(|e| e.to_string())?,
+    })
+}
+
+pub async fn list_characters(pool: &SqlitePool) -> Result<Vec<Character>, String> {
+    let rows = sqlx::query(
+        "SELECT id, name, tagline, persona, avatar_color, created_at FROM characters ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询角色失败：{e}"))?;
+    rows.iter().map(character_from_row).collect()
+}
+
+pub async fn get_character(pool: &SqlitePool, id: i64) -> Result<Character, String> {
+    let row = sqlx::query(
+        "SELECT id, name, tagline, persona, avatar_color, created_at FROM characters WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("查询角色失败：{e}"))?
+    .ok_or_else(|| format!("角色 {id} 不存在"))?;
+    character_from_row(&row)
+}
+
+pub async fn create_character(
+    pool: &SqlitePool,
+    input: &CharacterInput,
+) -> Result<Character, String> {
+    let result = sqlx::query(
+        "INSERT INTO characters (name, tagline, persona, avatar_color) VALUES (?, ?, ?, ?)",
+    )
+    .bind(&input.name)
+    .bind(&input.tagline)
+    .bind(&input.persona)
+    .bind(&input.avatar_color)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("新增角色失败：{e}"))?;
+    get_character(pool, result.last_insert_rowid()).await
+}
+
+pub async fn update_character(
+    pool: &SqlitePool,
+    id: i64,
+    input: &CharacterInput,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE characters SET name = ?, tagline = ?, persona = ?, avatar_color = ? WHERE id = ?",
+    )
+    .bind(&input.name)
+    .bind(&input.tagline)
+    .bind(&input.persona)
+    .bind(&input.avatar_color)
+    .bind(id)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("更新角色失败：{e}"))?;
+    Ok(())
+}
+
+pub async fn delete_character(pool: &SqlitePool, id: i64) -> Result<(), String> {
+    sqlx::query("DELETE FROM characters WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除角色失败：{e}"))?;
+    Ok(())
+}
+
+pub async fn list_personas(pool: &SqlitePool) -> Result<Vec<UserPersona>, String> {
+    let rows = sqlx::query("SELECT id, name, persona FROM user_personas ORDER BY id")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询分身失败：{e}"))?;
+    rows.iter().map(persona_from_row).collect()
+}
+
+pub async fn create_persona(
+    pool: &SqlitePool,
+    input: &UserPersonaInput,
+) -> Result<UserPersona, String> {
+    let result = sqlx::query("INSERT INTO user_personas (name, persona) VALUES (?, ?)")
+        .bind(&input.name)
+        .bind(&input.persona)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("新增分身失败：{e}"))?;
+    let row = sqlx::query("SELECT id, name, persona FROM user_personas WHERE id = ?")
+        .bind(result.last_insert_rowid())
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("查询分身失败：{e}"))?;
+    persona_from_row(&row)
+}
+
+pub async fn update_persona(
+    pool: &SqlitePool,
+    id: i64,
+    input: &UserPersonaInput,
+) -> Result<(), String> {
+    sqlx::query("UPDATE user_personas SET name = ?, persona = ? WHERE id = ?")
+        .bind(&input.name)
+        .bind(&input.persona)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新分身失败：{e}"))?;
+    Ok(())
+}
+
+pub async fn delete_persona(pool: &SqlitePool, id: i64) -> Result<(), String> {
+    sqlx::query("DELETE FROM user_personas WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除分身失败：{e}"))?;
+    Ok(())
+}
+
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
     sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
         .bind(key)
@@ -212,5 +351,176 @@ mod tests {
             .unwrap();
 
         assert!(column_exists(&pool, "characters", "probe").await.unwrap());
+    }
+
+    fn character_input(name: &str) -> CharacterInput {
+        CharacterInput {
+            name: name.into(),
+            tagline: "一句话简介".into(),
+            persona: "完整设定".into(),
+            avatar_color: "#abcdef".into(),
+        }
+    }
+
+    fn persona_input(name: &str) -> UserPersonaInput {
+        UserPersonaInput {
+            name: name.into(),
+            persona: "用户身份".into(),
+        }
+    }
+
+    /// 外键级联只在 PRAGMA 打开时生效，测试库显式开启以贴近 connect() 的配置。
+    async fn seeded_pool() -> SqlitePool {
+        let pool = test_pool().await;
+        migrate(&pool).await.unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn list_characters_returns_inserted_rows_in_id_order() {
+        let pool = seeded_pool().await;
+        create_character(&pool, &character_input("甲")).await.unwrap();
+        create_character(&pool, &character_input("乙")).await.unwrap();
+
+        let list = list_characters(&pool).await.unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "甲");
+        assert_eq!(list[1].name, "乙");
+    }
+
+    #[tokio::test]
+    async fn get_character_returns_only_the_requested_row() {
+        let pool = seeded_pool().await;
+        let first = create_character(&pool, &character_input("甲")).await.unwrap();
+        let second = create_character(&pool, &character_input("乙")).await.unwrap();
+
+        assert_eq!(get_character(&pool, second.id).await.unwrap().name, "乙");
+        assert_eq!(get_character(&pool, first.id).await.unwrap().name, "甲");
+        assert!(get_character(&pool, 99999).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn create_character_persists_all_fields() {
+        let pool = seeded_pool().await;
+        let created = create_character(&pool, &character_input("甲")).await.unwrap();
+
+        assert_eq!(created.name, "甲");
+        assert_eq!(created.tagline, "一句话简介");
+        assert_eq!(created.persona, "完整设定");
+        assert_eq!(created.avatar_color, "#abcdef");
+        assert!(created.id > 0);
+        assert!(!created.created_at.is_empty());
+    }
+
+    #[tokio::test]
+    async fn update_character_replaces_fields() {
+        let pool = seeded_pool().await;
+        let created = create_character(&pool, &character_input("甲")).await.unwrap();
+
+        let changed = CharacterInput {
+            name: "新名字".into(),
+            tagline: "新简介".into(),
+            persona: "新设定".into(),
+            avatar_color: "#123456".into(),
+        };
+        update_character(&pool, created.id, &changed).await.unwrap();
+
+        let saved = get_character(&pool, created.id).await.unwrap();
+        assert_eq!(saved.name, "新名字");
+        assert_eq!(saved.tagline, "新简介");
+        assert_eq!(saved.persona, "新设定");
+        assert_eq!(saved.avatar_color, "#123456");
+    }
+
+    #[tokio::test]
+    async fn delete_character_removes_only_that_row() {
+        let pool = seeded_pool().await;
+        let first = create_character(&pool, &character_input("甲")).await.unwrap();
+        create_character(&pool, &character_input("乙")).await.unwrap();
+
+        delete_character(&pool, first.id).await.unwrap();
+        let list = list_characters(&pool).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "乙");
+    }
+
+    #[tokio::test]
+    async fn list_personas_returns_inserted_rows_in_id_order() {
+        let pool = seeded_pool().await;
+        create_persona(&pool, &persona_input("甲")).await.unwrap();
+        create_persona(&pool, &persona_input("乙")).await.unwrap();
+
+        let list = list_personas(&pool).await.unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "甲");
+        assert_eq!(list[1].name, "乙");
+    }
+
+    #[tokio::test]
+    async fn create_persona_persists_fields() {
+        let pool = seeded_pool().await;
+        let created = create_persona(&pool, &persona_input("甲")).await.unwrap();
+
+        assert_eq!(created.name, "甲");
+        assert_eq!(created.persona, "用户身份");
+        assert!(created.id > 0);
+    }
+
+    #[tokio::test]
+    async fn update_persona_replaces_fields() {
+        let pool = seeded_pool().await;
+        let created = create_persona(&pool, &persona_input("甲")).await.unwrap();
+
+        update_persona(
+            &pool,
+            created.id,
+            &UserPersonaInput {
+                name: "新分身".into(),
+                persona: "新身份".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let list = list_personas(&pool).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "新分身");
+        assert_eq!(list[0].persona, "新身份");
+    }
+
+    #[tokio::test]
+    async fn delete_persona_removes_only_that_row() {
+        let pool = seeded_pool().await;
+        let first = create_persona(&pool, &persona_input("甲")).await.unwrap();
+        create_persona(&pool, &persona_input("乙")).await.unwrap();
+
+        delete_persona(&pool, first.id).await.unwrap();
+        let list = list_personas(&pool).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "乙");
+    }
+
+    #[tokio::test]
+    async fn deleting_character_cascades_to_sessions() {
+        let pool = seeded_pool().await;
+        let character = create_character(&pool, &character_input("甲")).await.unwrap();
+        sqlx::query("INSERT INTO sessions (character_id, title) VALUES (?, ?)")
+            .bind(character.id)
+            .bind("会话")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        delete_character(&pool, character.id).await.unwrap();
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "删除角色应级联删除其会话");
     }
 }
