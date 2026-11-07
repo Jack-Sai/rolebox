@@ -104,6 +104,16 @@ export type StreamEvent =
   | { type: "error"; message: string }
   | { type: "cancelled" };
 
+export interface AppConfig {
+  server_url: string;
+}
+
+export interface ConnectionInfo {
+  ok: boolean;
+  model: string;
+  ctxLength: number;
+}
+
 export interface ContextInfo {
   used: number;
   limit: number;

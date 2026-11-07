@@ -49,3 +49,35 @@ describe("SettingsPage 我的分身", () => {
     });
   });
 });
+
+describe("SettingsPage llama-server 页签", () => {
+  it("加载当前地址，修改后能保存", async () => {
+    mockedInvoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "get_personas":
+          return [];
+        case "get_settings":
+          return { server_url: "http://127.0.0.1:8080" };
+        default:
+          return null;
+      }
+    });
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByText("llama-server"));
+    const input = (await screen.findByLabelText(
+      "服务器地址",
+    )) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("http://127.0.0.1:8080"));
+
+    fireEvent.change(input, { target: { value: "http://localhost:9090/" } });
+    fireEvent.click(screen.getByText("保存地址"));
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith("set_server_url", {
+        url: "http://localhost:9090/",
+      });
+    });
+  });
+});

@@ -1,7 +1,9 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
+  AppConfig,
   Character,
   CharacterInput,
+  ConnectionInfo,
   ContextInfo,
   GroupMember,
   GroupMessage,
@@ -91,6 +93,12 @@ export const api = {
     channel.onmessage = onChunk;
     return invoke<Message>("regenerate_message", { messageId, onChunk: channel });
   },
+
+  getSettings: () => invoke<AppConfig>("get_settings"),
+
+  setServerUrl: (url: string) => invoke<void>("set_server_url", { url }),
+
+  testConnection: () => invoke<ConnectionInfo>("test_connection"),
 
   getGroupSessions: () => invoke<GroupSession[]>("get_group_sessions"),
 

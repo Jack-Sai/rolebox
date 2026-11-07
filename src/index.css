@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-/* 外观设置（C40）会在这里切换主题；当前固定浅色。 */
+/* 主题由 store/settings.ts 写到 <html data-theme>；组件内的 Tailwind 硬编码色
+   目前只覆盖了背景与正文色，逐组件换色留到后续。 */
 :root {
   font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   color-scheme: light;
@@ -10,6 +11,16 @@
   --text: #1f2937;
   --text-muted: #6b7280;
   --accent: #4f46e5;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1f1f22;
+  --surface-muted: #17171a;
+  --border: #333338;
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  --accent: #818cf8;
 }
 
 body {
