@@ -118,6 +118,10 @@
 `limit` 取 `/props` 的 `n_ctx`，拿不到回落 4096。真实 usage 在 `stream_chat` 的 on_usage 里
 写进 `AppState.last_usage`（内存缓存，重启后回到估算值）。
 
+**摘要落库**：`atomic_summarize` 在**一个事务**里插入 summary 消息（并回填 `version_group = id`）
+和标记 `id < before_id` 的旧消息 `summarized = 1`。分成两步做会出现「有摘要但旧消息没标记
+（上下文重复）」或「旧消息被吃掉但没摘要（上下文丢失）」；`role != 'summary'` 保证摘要本身永不被标记。
+
 `deprecated` 只是 UI 提示「这些消息生成时上下文已变」，**不参与上下文过滤**（DESIGN 4.2）。
 编辑 / 删除会破坏 KV cache 前缀，这是用户主动触发的破坏，可接受。
 

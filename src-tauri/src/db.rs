@@ -536,6 +536,68 @@ pub async fn insert_message_version(
     Ok(result.last_insert_rowid())
 }
 
+/// 把某条消息之前的消息标为已摘要（不再进入上下文，DESIGN 10.2）。
+/// 摘要消息本身永远不标记，否则下次压缩会把摘要也当成待摘要内容。
+pub async fn mark_summarized_before(
+    pool: &SqlitePool,
+    session_id: i64,
+    before_id: i64,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE messages SET summarized = 1 WHERE session_id = ? AND id < ? AND role != 'summary'",
+    )
+    .bind(session_id)
+    .bind(before_id)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("标记已摘要失败：{e}"))?;
+    Ok(())
+}
+
+/// 原子摘要：插入 summary 消息 + 标记它之前的消息，同一事务内完成。
+/// 中途失败若只做了一半，会留下「有摘要但旧消息还在上下文」或「旧消息被吃掉但没摘要」。
+pub async fn atomic_summarize(
+    pool: &SqlitePool,
+    session_id: i64,
+    content: &str,
+    before_id: i64,
+) -> Result<Message, String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("开启事务失败：{e}"))?;
+
+    let result =
+        sqlx::query("INSERT INTO messages (session_id, role, content) VALUES (?, 'summary', ?)")
+            .bind(session_id)
+            .bind(content)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入摘要失败：{e}"))?;
+    let id = result.last_insert_rowid();
+
+    sqlx::query("UPDATE messages SET version_group = id WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("回填版本组失败：{e}"))?;
+
+    sqlx::query(
+        "UPDATE messages SET summarized = 1 WHERE session_id = ? AND id < ? AND role != 'summary'",
+    )
+    .bind(session_id)
+    .bind(before_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("标记已摘要失败：{e}"))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("提交事务失败：{e}"))?;
+
+    get_message(pool, id).await
+}
+
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
     sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
         .bind(key)
@@ -1169,5 +1231,62 @@ mod tests {
         );
         assert_eq!(list[1].version_group, first);
         assert_eq!(list[2].id, later);
+    }
+
+    #[tokio::test]
+    async fn mark_summarized_before_only_flags_earlier_messages() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "user", "一").await.unwrap();
+        let second = insert_message(&pool, session_id, "assistant", "二")
+            .await
+            .unwrap();
+        let third = insert_message(&pool, session_id, "user", "三").await.unwrap();
+
+        mark_summarized_before(&pool, session_id, third).await.unwrap();
+
+        assert!(get_message(&pool, first).await.unwrap().summarized);
+        assert!(get_message(&pool, second).await.unwrap().summarized);
+        assert!(!get_message(&pool, third).await.unwrap().summarized);
+    }
+
+    #[tokio::test]
+    async fn atomic_summarize_inserts_summary_and_flags_older() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        insert_message(&pool, session_id, "user", "一").await.unwrap();
+        let second = insert_message(&pool, session_id, "assistant", "二")
+            .await
+            .unwrap();
+
+        let summary = atomic_summarize(&pool, session_id, "这是摘要", second)
+            .await
+            .unwrap();
+
+        assert_eq!(summary.role, "summary");
+        assert_eq!(summary.content, "这是摘要");
+        assert_eq!(summary.version_group, summary.id);
+        assert!(!summary.summarized, "摘要自己不应被标记为已摘要");
+
+        let all = list_messages(&pool, session_id).await.unwrap();
+        let first = all.iter().find(|item| item.content == "一").unwrap();
+        assert!(first.summarized);
+    }
+
+    #[tokio::test]
+    async fn atomic_summarize_leaves_recent_messages_intact() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        insert_message(&pool, session_id, "user", "一").await.unwrap();
+        let second = insert_message(&pool, session_id, "assistant", "二")
+            .await
+            .unwrap();
+        let third = insert_message(&pool, session_id, "user", "三").await.unwrap();
+
+        atomic_summarize(&pool, session_id, "摘要", second)
+            .await
+            .unwrap();
+
+        assert!(!get_message(&pool, third).await.unwrap().summarized);
     }
 }
