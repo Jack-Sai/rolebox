@@ -161,7 +161,10 @@
   （坑 #12 / #13）；`MessageList` 的 `switch (message.role)` 保留 default 兜底（坑 #4）；
   `InputArea` 基础输入框，流式停止与旁白模式留到 C15 / C24。
 - 追加消息用 `[...previous, message]`，不重建历史对象，否则 memo 恒失效。
-- C14 的生成仍是「等完成后一次性入列」，C15 会换成 `lib/stream.ts` 的流式打字机。
+- `lib/stream.ts`：`createStreamHandler` 分发六种 StreamEvent（default 用 `never` 做穷尽检查）；
+  `mergeText` 只在末尾是文本块时合并，`flushBuffer` 在插入非文本块前排空缓冲（坑 #5）。
+  ChatPage 用 `id = -1` 的临时消息逐字追加，`Done` 换成真实 id；`Cancelled` 保留已生成内容，
+  并用命令返回值补齐后端落库后的真实 id。流式期间 InputArea 的发送按钮变「停止」，调 `cancel_generation`。
 - 样式：Tailwind v4 由 `@tailwindcss/vite` 插件加载，`src/index.css` 定义 CSS 变量。
 - `src/test/setup.ts` 显式注册 `afterEach(cleanup)`：vitest 未开 `globals`，
   RTL 不会自动清理，否则多个组件测试的 DOM 会叠加（坑 #9 同源）。

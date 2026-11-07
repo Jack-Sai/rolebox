@@ -25,4 +25,14 @@ describe("InputArea", () => {
 
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  it("流式期间发送按钮变为停止并调用 onStop", () => {
+    const onStop = vi.fn();
+    render(<InputArea onSend={vi.fn()} onStop={onStop} streaming />);
+
+    fireEvent.click(screen.getByText("停止"));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("发送")).toBeNull();
+  });
 });
