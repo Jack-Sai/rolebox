@@ -3,6 +3,8 @@ pub mod export;
 pub mod handlers;
 pub mod models;
 pub mod prompt;
+pub mod provider;
+pub mod stream;
 
 use dashmap::DashMap;
 use std::sync::{atomic::AtomicBool, Arc, RwLock};

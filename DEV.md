@@ -67,6 +67,13 @@
   summary 移到 system 之后（物理 id 最大但语义在开头），narration 转 `user` + `【旁白】`，
   单人 user/assistant 都不加名字前缀，跳过 `summarized = 1`。
   `ChatMessage` 实际定义在 prompt.rs（C11 先于 C12），provider.rs 会重导出。
+- `provider.rs`：`build_request_body` 只产出 `model` / `messages` / `stream` /
+  `stream_options.include_usage` 四个字段（铁律二，单测逐项断言无采样参数）；
+  `fetch_model_name` 从 `/v1/models` 取首个 id；`chat_stream` 逐行消费 SSE，
+  HTTP chunk 边界不等于行边界，故先缓冲再解析。
+- `stream.rs`：`SseEvent` = Delta / Usage / Done；`parse_sse_line` 对非标准帧返回 None 不 panic，
+  **先取 usage 再取 delta**（坑 #19 的 `choices: []` 帧）；`process_sse_line` 每个 Delta
+  后检查 cancel，抽成纯函数以便不启 server 就能测取消。
 - `export.rs`：单角色 JSON 的编解码纯函数 + 文件读写；`encode_character` /
   `decode_character` 不碰文件系统，便于验证格式与一致性。
 - 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。
