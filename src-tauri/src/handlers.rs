@@ -146,6 +146,27 @@ pub async fn send_user_message(
     db::get_message(&state.pool, id).await
 }
 
+/// 编辑消息：原地改内容，之后的消息标记「上下文已变」——这是用户主动破坏缓存，可接受。
+#[tauri::command]
+pub async fn update_message(
+    state: State<'_, AppState>,
+    id: i64,
+    content: String,
+) -> Result<(), String> {
+    let message = db::get_message(&state.pool, id).await?;
+    db::update_message(&state.pool, id, &content).await?;
+    db::mark_deprecated_after(&state.pool, message.session_id, id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_message(state: State<'_, AppState>, id: i64) -> Result<(), String> {
+    let message = db::get_message(&state.pool, id).await?;
+    db::delete_message(&state.pool, id).await?;
+    db::mark_deprecated_after(&state.pool, message.session_id, id).await?;
+    Ok(())
+}
+
 /// 用户点停止 → 只置标志；流式循环在每个 Delta 之后检查它。
 #[tauri::command]
 pub async fn cancel_generation(

@@ -104,6 +104,11 @@
 | `send_user_message` | `session_id, content` | `Message` | **只落库，不触发模型** |
 | `generate_reply` | `session_id, onChunk` | `Message` | 抢全局 send_lock → 构造 prompt → 流式 → 落库 |
 | `cancel_generation` | `session_id` | `()` | 置 `s:<id>` 的 AtomicBool，流式循环逐 Delta 检查 |
+| `update_message` | `id, content` | `()` | 原地改内容，并把之后的消息标 `deprecated = 1` |
+| `delete_message` | `id` | `()` | 物理删除，并把之后的消息标 `deprecated = 1` |
+
+`deprecated` 只是 UI 提示「这些消息生成时上下文已变」，**不参与上下文过滤**（DESIGN 4.2）。
+编辑 / 删除会破坏 KV cache 前缀，这是用户主动触发的破坏，可接受。
 
 命令层只做转发（生成命令除外），统一 `Result<T, String>`。
 

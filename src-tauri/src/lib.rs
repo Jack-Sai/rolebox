@@ -74,6 +74,8 @@ pub fn run() {
             handlers::send_user_message,
             handlers::generate_reply,
             handlers::cancel_generation,
+            handlers::update_message,
+            handlers::delete_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
