@@ -1,5 +1,6 @@
-use crate::models::{Character, Message, UserPersona};
+use crate::models::{Character, GroupMessage, Message, UserPersona};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // 整个项目最关键的模块（铁律一）：system prompt 在会话生命周期内必须前缀字节级不变。
 // 因此这里禁止出现时间、随机数、记忆注入、动态提醒等任何会随调用变化的内容。
@@ -101,6 +102,156 @@ pub fn format_single_history(
     }
 
     result
+}
+
+/// 群聊 system prompt（DESIGN 5.5.2）。同样在会话创建时定稿，之后一个字节不改。
+pub fn build_group_system_prompt(
+    members: &[(Character, String)],
+    scenario: &str,
+    user_persona: Option<&UserPersona>,
+) -> String {
+    let scenario_text = if scenario.trim().is_empty() {
+        "（未指定）"
+    } else {
+        scenario
+    };
+    let user_text = user_persona
+        .map(|persona| persona.persona.trim())
+        .filter(|text| !text.is_empty())
+        .unwrap_or("（用户未指定身份）");
+    let user_name = user_persona
+        .map(|persona| persona.name.trim())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("用户");
+
+    let mut lines: Vec<String> = Vec::new();
+    lines.push("【身份】你正在参与一个多角色角色扮演。参与者：".to_string());
+    for (character, intro) in members {
+        lines.push(format!("- {}：{}", character.name, intro));
+    }
+    lines.push(format!("- 用户：{user_name}"));
+    lines.push(String::new());
+
+    lines.push("【角色设定】".to_string());
+    for (character, _) in members {
+        lines.push(format!("【{}】", character.name));
+        lines.push(character.persona.clone());
+        lines.push(String::new());
+    }
+
+    lines.push("【场景】".to_string());
+    lines.push(scenario_text.to_string());
+    lines.push(String::new());
+    lines.push("【用户】".to_string());
+    lines.push(user_text.to_string());
+    lines.push(String::new());
+
+    lines.push("【规则】".to_string());
+    for rule in [
+        "- 每次只扮演被指定的一个角色，只输出该角色的台词和动作",
+        "- 你的发言会被加上 [角色名]: 前缀，所以你**不要**自己加前缀",
+        "- 动作、神态、心理用圆括号（）描写",
+        "- 电子消息（短信、聊天记录等）用方括号【】表示",
+        "- 你可以回应其他角色，也可以只回应用户",
+        "- 绝对不要替用户或其他角色说话",
+        "- 不输出思考过程，不输出任何 meta 说明或旁白",
+    ] {
+        lines.push(rule.to_string());
+    }
+
+    lines.join("\n")
+}
+
+/// 群聊历史（DESIGN 5.5.4）：assistant 与 user 都要加名字前缀，否则模型分不清谁在说。
+pub fn format_group_history(
+    system_prompt: &str,
+    messages: &[GroupMessage],
+    members: &HashMap<i64, String>,
+    user_name: &str,
+) -> Vec<ChatMessage> {
+    let mut result = vec![ChatMessage {
+        role: "system".into(),
+        content: system_prompt.to_string(),
+    }];
+
+    for message in messages
+        .iter()
+        .filter(|item| item.role == "summary" && !item.summarized)
+    {
+        result.push(ChatMessage {
+            role: "system".into(),
+            content: format!("[对话摘要]\n{}", message.content),
+        });
+    }
+
+    for message in messages
+        .iter()
+        .filter(|item| item.role != "summary" && !item.summarized)
+    {
+        let (role, content) = match message.role.as_str() {
+            "narration" => ("user", format!("【旁白】{}", message.content)),
+            "user" => ("user", format!("[{user_name}]: {}", message.content)),
+            "assistant" => {
+                let name = message
+                    .character_id
+                    .and_then(|id| members.get(&id))
+                    .map(String::as_str)
+                    .unwrap_or("未知角色");
+                ("assistant", format!("[{name}]: {}", message.content))
+            }
+            _ => continue,
+        };
+        result.push(ChatMessage {
+            role: role.to_string(),
+            content,
+        });
+    }
+
+    result
+}
+
+/// 模型可能不听话，输出 `[林月]: （挥手）嗨`。只清理**开头**匹配 expected_name 的前缀，
+/// 中间的 `[xxx]:` 保留 —— 那可能是台词内容的一部分（DESIGN 5.5.6）。
+pub fn strip_role_prefix(content: &str, expected_name: &str) -> String {
+    let trimmed = content.trim_start();
+
+    // 形式一：[名字]: / [名字]：
+    if let Some(rest) = trimmed.strip_prefix('[') {
+        if let Some(end) = rest.find(']') {
+            let name = &rest[..end];
+            if !name.is_empty() && name == expected_name {
+                let after = &rest[end + 1..];
+                if let Some(text) = after
+                    .strip_prefix(':')
+                    .or_else(|| after.strip_prefix('：'))
+                {
+                    return text.trim_start().to_string();
+                }
+            }
+        }
+    }
+
+    // 形式二：名字: / 名字：
+    if let Some(after) = trimmed.strip_prefix(expected_name) {
+        if let Some(text) = after
+            .strip_prefix(':')
+            .or_else(|| after.strip_prefix('：'))
+        {
+            return text.trim_start().to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
+/// 当前轮的发言指示（DESIGN 5.5.5）：只加在末尾，不存储、不进历史。
+pub fn append_turn_instruction(messages: &mut Vec<ChatMessage>, speaker_name: &str) {
+    messages.push(ChatMessage {
+        role: "user".into(),
+        content: format!(
+            "现在请扮演 {speaker_name} 发言。只输出 {speaker_name} 的台词和动作，不要加 [角色名]: 前缀，不要替其他角色或用户说话。"
+        ),
+    });
 }
 
 /// 摘要 prompt（DESIGN 5.5.7）。入参是 (显示名, 内容) —— 调用方负责把
@@ -323,5 +474,127 @@ mod tests {
             ("甲".into(), "一".into()),
         ]);
         assert!(ordered[1].content.starts_with("[乙]: 二"));
+    }
+
+    fn group_character(id: i64, name: &str, tagline: &str, persona: &str) -> Character {
+        Character {
+            id,
+            name: name.into(),
+            tagline: tagline.into(),
+            persona: persona.into(),
+            avatar_color: "#123456".into(),
+            created_at: "2026-11-07 00:00:00".into(),
+        }
+    }
+
+    fn group_message(
+        id: i64,
+        character_id: Option<i64>,
+        role: &str,
+        content: &str,
+    ) -> GroupMessage {
+        GroupMessage {
+            id,
+            group_id: 1,
+            character_id,
+            role: role.into(),
+            content: content.into(),
+            version_group: id,
+            is_active: true,
+            deprecated: false,
+            summarized: false,
+            created_at: "2026-11-07 00:00:00".into(),
+        }
+    }
+
+    #[test]
+    fn group_system_prompt_lists_members_roles_and_rules() {
+        let members = vec![
+            (group_character(1, "甲", "冷静", "甲的设定"), "冷静".to_string()),
+            (group_character(2, "乙", "热情", "乙的设定"), "热情".to_string()),
+        ];
+        let text = build_group_system_prompt(&members, "雨夜", None);
+
+        assert!(text.contains("- 甲：冷静"));
+        assert!(text.contains("- 乙：热情"));
+        assert!(text.contains("- 用户：用户"));
+        assert!(text.contains("【甲】\n甲的设定"));
+        assert!(text.contains("【场景】\n雨夜"));
+        assert!(text.contains("（用户未指定身份）"));
+        assert!(text.contains("【规则】"));
+    }
+
+    #[test]
+    fn group_system_prompt_is_byte_stable_with_placeholders() {
+        let members = vec![(
+            group_character(1, "甲", "冷静", "设定"),
+            "冷静".to_string(),
+        )];
+        let first = build_group_system_prompt(&members, "", None);
+        let second = build_group_system_prompt(&members, "", None);
+
+        assert_eq!(first.as_bytes(), second.as_bytes());
+        assert!(first.contains("（未指定）"));
+    }
+
+    #[test]
+    fn group_history_prefixes_both_sides() {
+        let mut members = HashMap::new();
+        members.insert(1, "甲".to_string());
+        let messages = vec![
+            group_message(1, None, "user", "你们好"),
+            group_message(2, Some(1), "assistant", "（点头）你好"),
+        ];
+
+        let result = format_group_history("SYS", &messages, &members, "阿明");
+
+        assert_eq!(result[0].content, "SYS");
+        assert_eq!(result[1].content, "[阿明]: 你们好");
+        assert_eq!(result[2].content, "[甲]: （点头）你好");
+    }
+
+    #[test]
+    fn group_history_puts_summary_after_system_and_maps_narration() {
+        let members = HashMap::new();
+        let messages = vec![
+            group_message(1, None, "user", "旧事"),
+            group_message(9, None, "summary", "摘要内容"),
+            group_message(10, None, "narration", "下雨了"),
+        ];
+
+        let result = format_group_history("SYS", &messages, &members, "用户");
+
+        assert_eq!(result[1].role, "system");
+        assert_eq!(result[1].content, "[对话摘要]\n摘要内容");
+        assert_eq!(result[2].content, "[用户]: 旧事");
+        assert_eq!(result[3].content, "【旁白】下雨了");
+    }
+
+    #[test]
+    fn strip_role_prefix_handles_bracket_and_plain_forms() {
+        assert_eq!(strip_role_prefix("[甲]: （挥手）嗨", "甲"), "（挥手）嗨");
+        assert_eq!(strip_role_prefix("[甲]：（挥手）嗨", "甲"), "（挥手）嗨");
+        assert_eq!(strip_role_prefix("甲: 你好", "甲"), "你好");
+        assert_eq!(strip_role_prefix("甲：你好", "甲"), "你好");
+        // 别的角色名不清理：可能是台词里引用了别人的发言。
+        assert_eq!(strip_role_prefix("[乙]: 你好", "甲"), "[乙]: 你好");
+        // 只清理开头，中间的前缀保留。
+        assert_eq!(strip_role_prefix("他说[乙]: 好", "甲"), "他说[乙]: 好");
+    }
+
+    #[test]
+    fn append_turn_instruction_only_touches_the_tail() {
+        let mut messages = vec![ChatMessage {
+            role: "user".into(),
+            content: "历史".into(),
+        }];
+
+        append_turn_instruction(&mut messages, "甲");
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].content, "历史");
+        assert_eq!(messages[1].role, "user");
+        assert!(messages[1].content.contains("甲"));
+        assert!(!messages[1].content.contains("历史"));
     }
 }
