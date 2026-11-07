@@ -48,9 +48,9 @@ pub fn run() {
                 let url = db::get_setting(&pool, "server_url").await?;
                 let max_output_tokens: u32 = db::get_setting(&pool, "max_output_tokens")
                     .await?
-                    .unwrap_or_else(|| "300".to_string())
+                    .unwrap_or_else(|| "0".to_string())
                     .parse()
-                    .unwrap_or(300);
+                    .unwrap_or(0);
                 Ok::<_, String>((pool, url.unwrap_or_else(|| DEFAULT_SERVER_URL.to_string()), max_output_tokens))
             })
             .map_err(std::io::Error::other)?;
