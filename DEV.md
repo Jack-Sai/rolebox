@@ -48,8 +48,11 @@
 ## 4. Rust 模块与数据模型
 
 - `lib.rs`：`AppConfig { server_url }`、`DEFAULT_SERVER_URL`、
-  `AppState { pool, http, send_lock, cancel_flags, config }`；setup 依次建目录 →
-  `db::connect` + `migrate` → 读 `settings.server_url` → `app.manage(state)`。
+  `AppState { pool, http, send_lock, cancel_flags, last_usage, config }`；setup 依次建目录 →
+  `db::connect` + `migrate` → 读 `settings.server_url` → `app.manage(state)` → 建系统托盘。
+- **系统托盘**（C40）：菜单「显示主窗口 / 退出」，左键单击托盘也唤回窗口；
+  `CloseRequested` 里先 `api.prevent_close()` 再 `window.hide()`（顺序不能反，坑 #16），
+  关闭窗口只是最小化到托盘，真正退出走菜单。托盘需要 `tauri` 的 `tray-icon` feature。
 - `db.rs`：`connect` / `migrate` / `column_exists` / `ensure_column` / `get_setting` /
   `list_characters` / `get_character` / `create_character` / `update_character` /
   `delete_character` / `list_personas` / `create_persona` / `update_persona` /
