@@ -84,6 +84,7 @@ pub fn run() {
             handlers::get_message_versions,
             handlers::activate_message_version,
             handlers::get_context_info,
+            handlers::compress_context,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

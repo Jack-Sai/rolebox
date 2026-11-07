@@ -113,6 +113,7 @@
 | `get_message_versions` | `message_id` | `Vec<Message>` | 返回该版本组全部版本，按 id 升序 |
 | `activate_message_version` | `message_id` | `()` | 事务内整组清 0 再置目标为 1 |
 | `get_context_info` | `session_id` | `ContextInfo` | `used` 优先用上次请求的真实 `prompt_tokens`，否则按字符估算 |
+| `compress_context` | `session_id` | `()` | 保留最近 4 条，其余生成摘要并原子落库；也抢 `send_lock` |
 
 `ContextInfo.isAccurate`：`used` 来自真实 usage 时为 `true`；按字符估算时为 `false`。
 `limit` 取 `/props` 的 `n_ctx`，拿不到回落 4096。真实 usage 在 `stream_chat` 的 on_usage 里

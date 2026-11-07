@@ -245,6 +245,92 @@ pub fn estimate_tokens(messages: &[Message]) -> u32 {
         .sum()
 }
 
+/// 压缩上下文：保留最近 4 条，其余交给模型生成摘要，再原子落库（DESIGN 10.2）。
+#[tauri::command]
+pub async fn compress_context(
+    state: State<'_, AppState>,
+    session_id: i64,
+) -> Result<(), String> {
+    // 摘要也是一次模型调用，必须和生成共用同一把锁。
+    let _guard = state.send_lock.lock().await;
+
+    let session = db::get_session(&state.pool, session_id).await?;
+    let character = db::get_character(&state.pool, session.character_id).await?;
+    let persona = match session.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+
+    let messages = db::list_messages(&state.pool, session_id).await?;
+    // 已摘要的跳过，摘要消息本身也不参与再次摘要。
+    let candidates: Vec<&Message> = messages
+        .iter()
+        .filter(|item| !item.summarized && item.role != "summary")
+        .collect();
+
+    const KEEP_RECENT: usize = 4;
+    if candidates.len() <= KEEP_RECENT {
+        return Err("消息太少，暂时不需要压缩".to_string());
+    }
+    let split_at = candidates.len() - KEEP_RECENT;
+    let (to_summarize, _keep) = candidates.split_at(split_at);
+    let before_id = to_summarize
+        .last()
+        .map(|item| item.id)
+        .ok_or_else(|| "没有可摘要的消息".to_string())?;
+
+    // 摘要 prompt 里要用可读名字，否则模型分不清谁说了什么。
+    let user_name = persona.as_ref().map(|p| p.name.as_str()).unwrap_or("用户");
+    let pairs: Vec<(String, String)> = to_summarize
+        .iter()
+        .map(|item| {
+            let name = match item.role.as_str() {
+                "assistant" => character.name.clone(),
+                "narration" => "旁白".to_string(),
+                _ => user_name.to_string(),
+            };
+            (name, item.content.clone())
+        })
+        .collect();
+
+    let base = state
+        .config
+        .read()
+        .map_err(|_| "读取配置失败".to_string())?
+        .server_url
+        .clone();
+    let model = provider::fetch_model_name(&state.http, &base)
+        .await
+        .unwrap_or_else(|_| "local-model".to_string());
+
+    // 摘要不需要打字机效果，用闭包把全文收进 buffer 即可。
+    let buffer = Arc::new(std::sync::Mutex::new(String::new()));
+    let sink = buffer.clone();
+    provider::chat_stream(
+        &state.http,
+        &base,
+        provider::ChatRequest {
+            model,
+            messages: prompt::build_summary_prompt(&pairs),
+            stream: true,
+        },
+        Arc::new(AtomicBool::new(false)),
+        move |text| {
+            sink.lock().unwrap().push_str(&text);
+        },
+        |_usage| {},
+    )
+    .await?;
+
+    let summary = buffer.lock().unwrap().trim().to_string();
+    if summary.is_empty() {
+        return Err("模型没有返回摘要内容".to_string());
+    }
+
+    db::atomic_summarize(&state.pool, session_id, &summary, before_id).await?;
+    Ok(())
+}
+
 /// 上下文用量。used 优先用最近一次请求的真实 prompt_tokens（isAccurate = true），
 /// 否则按字符数估算（isAccurate = false）。
 #[tauri::command]
