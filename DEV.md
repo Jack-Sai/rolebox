@@ -69,7 +69,8 @@
   `ChatMessage` 实际定义在 prompt.rs（C11 先于 C12），provider.rs 会重导出。
 - `provider.rs`：`build_request_body` 只产出 `model` / `messages` / `stream` /
   `stream_options.include_usage` 四个字段（铁律二，单测逐项断言无采样参数）；
-  `fetch_model_name` 从 `/v1/models` 取首个 id；`chat_stream` 逐行消费 SSE，
+  `fetch_model_name` 从 `/v1/models` 取首个 id；`fetch_ctx_len` 从 `/props` 取 `n_ctx`
+  （优先 `default_generation_settings.n_ctx`，兼容顶层；0 / 负数视为无效）；`chat_stream` 逐行消费 SSE，
   HTTP chunk 边界不等于行边界，故先缓冲再解析。
 - `stream.rs`：`SseEvent` = Delta / Usage / Done；`parse_sse_line` 对非标准帧返回 None 不 panic，
   **先取 usage 再取 delta**（坑 #19 的 `choices: []` 帧）；`process_sse_line` 每个 Delta

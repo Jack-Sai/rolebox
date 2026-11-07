@@ -56,6 +56,33 @@ pub async fn fetch_model_name(client: &Client, base: &str) -> Result<String, Str
         .ok_or_else(|| "模型列表为空或格式异常".to_string())
 }
 
+/// llama.cpp 的 /props 把 n_ctx 放在 default_generation_settings 下；
+/// 不同版本也可能放在顶层，两者都兼容。抽成纯函数以便不起 server 就能测。
+pub fn parse_ctx_len(value: &Value) -> Option<u32> {
+    value
+        .get("default_generation_settings")
+        .and_then(|settings| settings.get("n_ctx"))
+        .or_else(|| value.get("n_ctx"))
+        .and_then(Value::as_u64)
+        .filter(|n_ctx| *n_ctx > 0)
+        .map(|n_ctx| n_ctx as u32)
+}
+
+/// 上下文长度：GET /props，取 n_ctx（DESIGN 5.3）。
+pub async fn fetch_ctx_len(client: &Client, base: &str) -> Result<u32, String> {
+    let value: Value = client
+        .get(format!("{base}/props"))
+        .send()
+        .await
+        .map_err(|e| format!("获取上下文长度失败：{e}"))?
+        .error_for_status()
+        .map_err(|e| format!("上下文接口返回错误：{e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("解析上下文长度失败：{e}"))?;
+    parse_ctx_len(&value).ok_or_else(|| "无法从 /props 读取 n_ctx".to_string())
+}
+
 /// POST /v1/chat/completions 并逐行消费 SSE。
 /// 取消标志在每个 Delta 之后检查一次；Cancelled / Done 都提前结束读取。
 pub async fn chat_stream<D, U>(
@@ -161,5 +188,26 @@ mod tests {
         assert_eq!(body["stream"].as_bool(), Some(true));
         assert_eq!(body["messages"][0]["role"].as_str(), Some("user"));
         assert_eq!(body["messages"][0]["content"].as_str(), Some("你好"));
+    }
+
+    #[test]
+    fn parses_nested_n_ctx_from_props() {
+        let props = serde_json::json!({
+            "default_generation_settings": { "n_ctx": 32768 },
+            "total_slots": 1
+        });
+        assert_eq!(parse_ctx_len(&props), Some(32768));
+    }
+
+    #[test]
+    fn falls_back_to_top_level_and_rejects_invalid() {
+        assert_eq!(parse_ctx_len(&serde_json::json!({ "n_ctx": 4096 })), Some(4096));
+        // 0 或负数视为无效，避免进度条出现除以零。
+        assert_eq!(parse_ctx_len(&serde_json::json!({ "n_ctx": 0 })), None);
+        assert_eq!(parse_ctx_len(&serde_json::json!({})), None);
+        assert_eq!(
+            parse_ctx_len(&serde_json::json!({ "default_generation_settings": {} })),
+            None
+        );
     }
 }
