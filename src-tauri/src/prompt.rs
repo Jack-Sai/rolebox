@@ -42,7 +42,7 @@ pub fn build_single_system_prompt(
         "- 严禁输出思考过程、推理痕迹、meta 说明或任何非角色内容，不要使用任何思考标签".to_string(),
         "- 不得主动发起对话，仅在用户输入后回应".to_string(),
         "- 始终保持角色人设，不得以模型或助手身份自述".to_string(),
-        "- 回复简洁，控制在适当长度，避免冗长".to_string(),
+        "- 回答控制在150字以内，简洁有力，不要冗长".to_string(),
         String::new(),
         "【格式规则】".to_string(),
         "- 你的所有发言直接书写，不要加 [角色名]: 前缀".to_string(),
@@ -159,7 +159,7 @@ pub fn build_group_system_prompt(
         "- 你可以回应其他角色，也可以只回应用户",
         "- 绝对不要替用户或其他角色说话",
         "- 不输出思考过程，不输出任何 meta 说明或旁白，不要使用任何思考标签",
-        "- 回复简洁，控制在适当长度，避免冗长",
+        "- 回答控制在150字以内，简洁有力，不要冗长",
     ] {
         lines.push(rule.to_string());
     }
@@ -249,6 +249,41 @@ pub fn strip_role_prefix(content: &str, expected_name: &str) -> String {
     trimmed.to_string()
 }
 
+/// 清理模型输出中的思考标签内容（Qwen3 `<thinking>...</thinking>`、DeepSeek R1 ` ``` `）。
+/// 思考功能无法在客户端完全关闭（取决于 server 的 chat template），
+/// 因此在落库前剥离思考片段，避免思考内容进入可见消息和上下文。
+pub fn strip_thinking_tags(content: &str) -> String {
+    let mut result = content.to_string();
+
+    // Qwen3：<thinking>...</thinking>
+    loop {
+        let start = match result.find("<thinking>") {
+            Some(s) => s,
+            None => break,
+        };
+        let end = match result[start..].find("</thinking>") {
+            Some(e) => start + e + "</thinking>".len(),
+            None => break,
+        };
+        result = format!("{}{}", &result[..start], &result[end..]);
+    }
+
+    // DeepSeek R1： ``` ... ```
+    loop {
+        let start = match result.find("```") {
+            Some(s) => s,
+            None => break,
+        };
+        let end = match result[start + 3..].find("```") {
+            Some(e) => start + 3 + e + 3,
+            None => break,
+        };
+        result = format!("{}{}", &result[..start], &result[end..]);
+    }
+
+    result.trim().to_string()
+}
+
 /// 当前轮的发言指示（DESIGN 5.5.5）：只加在末尾，不存储、不进历史。
 pub fn append_turn_instruction(messages: &mut Vec<ChatMessage>, speaker_name: &str) {
     messages.push(ChatMessage {
@@ -323,7 +358,7 @@ mod tests {
 - 严禁输出思考过程、推理痕迹、meta 说明或任何非角色内容，不要使用任何思考标签\n\
 - 不得主动发起对话，仅在用户输入后回应\n\
 - 始终保持角色人设，不得以模型或助手身份自述\n\
-- 回复简洁，控制在适当长度，避免冗长\n\
+- 回答控制在150字以内，简洁有力，不要冗长\n\
 \n\
 【格式规则】\n\
 - 你的所有发言直接书写，不要加 [角色名]: 前缀\n\
@@ -590,6 +625,29 @@ mod tests {
         assert_eq!(strip_role_prefix("[乙]: 你好", "甲"), "[乙]: 你好");
         // 只清理开头，中间的前缀保留。
         assert_eq!(strip_role_prefix("他说[乙]: 好", "甲"), "他说[乙]: 好");
+    }
+
+    #[test]
+    fn strip_thinking_tags_removes_qwen3_and_deepseek_blocks() {
+        // Qwen3 <thinking>...</thinking>
+        assert_eq!(
+            strip_thinking_tags("你好<thinking>思考内容</thinking>再见"),
+            "你好再见"
+        );
+        // 多个思考块
+        assert_eq!(
+            strip_thinking_tags("A<thinking>1</thinking>B<thinking>2</thinking>C"),
+            "ABC"
+        );
+        // DeepSeek R1 ```...```
+        assert_eq!(
+            strip_thinking_tags("你好```思考内容```你好"),
+            "你好你好"
+        );
+        // 无思考标签时原样返回
+        assert_eq!(strip_thinking_tags("纯文本回复"), "纯文本回复");
+        // 空字符串
+        assert_eq!(strip_thinking_tags(""), "");
     }
 
     #[test]

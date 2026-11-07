@@ -647,6 +647,7 @@ async fn generate_group_reply_inner(
 
     // 模型可能不听话自己加 [名字]: 前缀，落库前清掉（DESIGN 5.5.6）。
     let cleaned = prompt::strip_role_prefix(&text, &speaker_name);
+    let cleaned = prompt::strip_thinking_tags(&cleaned);
     let saved = if cleaned.trim().is_empty() {
         None
     } else {
@@ -836,7 +837,7 @@ async fn generate_reply_inner(
 ) -> Result<Message, String> {
     let session = db::get_session(&state.pool, session_id).await?;
     let chat_messages = build_single_context(state, &session).await?;
-    let (stream_result, text) = stream_chat(
+    let (stream_result, mut text) = stream_chat(
         state,
         Some(session_id),
         chat_messages,
@@ -844,6 +845,8 @@ async fn generate_reply_inner(
         cancel.clone(),
     )
     .await;
+    // 剥离思考标签内容（Qwen3 <thinking>、DeepSeek R1 </think>），避免思考片段进入可见消息和上下文。
+    text = prompt::strip_thinking_tags(&text);
     let cancelled = cancel.load(Ordering::SeqCst);
 
     // 取消后仍落库已生成部分（DESIGN 8.2）；完全没内容就不制造空消息。
@@ -901,7 +904,7 @@ async fn regenerate_inner(
     // 旧版本先下线，避免生成期间同一组两条同时 active。
     db::deactivate_group(&state.pool, target.version_group).await?;
 
-    let (stream_result, text) = stream_chat(
+    let (stream_result, mut text) = stream_chat(
         state,
         Some(session.id),
         chat_messages,
@@ -909,6 +912,7 @@ async fn regenerate_inner(
         cancel.clone(),
     )
     .await;
+    text = prompt::strip_thinking_tags(&text);
     let cancelled = cancel.load(Ordering::SeqCst);
 
     let saved = if text.is_empty() {
