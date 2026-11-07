@@ -1,4 +1,5 @@
 mod db;
+pub mod handlers;
 pub mod models;
 
 use dashmap::DashMap;
@@ -18,12 +19,6 @@ pub struct AppState {
     // key = "s:<session_id>" 或 "g:<group_id>"
     pub cancel_flags: DashMap<String, Arc<AtomicBool>>,
     pub config: RwLock<AppConfig>,
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -54,7 +49,86 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![handlers::greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod command_registry_tests {
+    // 坑 #15：#[tauri::command] 函数即使没人调用也能编译；漏注册只在前端 invoke
+    // 运行到那一行才炸。这里把漏注册变成一条会失败的 Rust 单测。
+    const HANDLERS: &str = include_str!("handlers.rs");
+    const LIB: &str = include_str!("lib.rs");
+
+    const MARKER: &str = "generate_handler![";
+
+    fn declared_commands(source: &str) -> Vec<String> {
+        let mut names = Vec::new();
+        let mut armed = false;
+        for line in source.lines() {
+            let text = line.trim();
+            if text.starts_with("#[tauri::command") {
+                armed = true;
+                continue;
+            }
+            if !armed {
+                continue;
+            }
+            let is_fn_line = text.starts_with("fn ")
+                || text.starts_with("async fn ")
+                || text.starts_with("pub fn ")
+                || text.starts_with("pub async fn ")
+                || text.starts_with("pub(crate) fn ")
+                || text.starts_with("pub(crate) async fn ");
+            if !is_fn_line {
+                continue;
+            }
+            let Some(pos) = text.find("fn ") else {
+                continue;
+            };
+            let name: String = text[pos + 3..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                names.push(name);
+                armed = false;
+            }
+        }
+        names
+    }
+
+    fn registered_commands(source: &str) -> Vec<String> {
+        let Some(start) = source.find(MARKER) else {
+            return Vec::new();
+        };
+        let tail = &source[start + MARKER.len()..];
+        let Some(end) = tail.find(']') else {
+            return Vec::new();
+        };
+        tail[..end]
+            .split(',')
+            .map(|part| part.trim())
+            .filter(|part| !part.is_empty())
+            .map(|part| part.rsplit("::").next().unwrap_or(part).trim().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn every_tauri_command_is_registered() {
+        let declared = declared_commands(HANDLERS);
+        assert!(
+            !declared.is_empty(),
+            "handlers.rs 中应有 #[tauri::command] 函数"
+        );
+
+        let registered = registered_commands(LIB);
+        for name in declared {
+            assert!(
+                registered.iter().any(|item| item == &name),
+                "命令 {name} 未在 invoke_handler 注册"
+            );
+        }
+    }
 }
