@@ -96,8 +96,22 @@
 
 | `export_character` | `id, path` | `()` | 读角色 → 写单角色 JSON 文件 |
 | `import_character` | `path, mode` | `Character` | 读 JSON → 新建角色 |
+| `get_sessions` | `character_id` | `Vec<Session>` | 按 id 升序列出该角色的会话 |
+| `get_session` | `id` | `Session` | 聊天页取标题 / 场景 / 分身 |
+| `create_session` | `input` | `Session` | 新增后回读 |
+| `delete_session` | `id` | `()` | 外键级联删除其消息 |
+| `get_messages` | `session_id` | `Vec<Message>` | 只取 `is_active = 1`，按 id 升序 |
+| `send_user_message` | `session_id, content` | `Message` | **只落库，不触发模型** |
+| `generate_reply` | `session_id, onChunk` | `Message` | 抢全局 send_lock → 构造 prompt → 流式 → 落库 |
+| `cancel_generation` | `session_id` | `()` | 置 `s:<id>` 的 AtomicBool，流式循环逐 Delta 检查 |
 
-命令层只做转发，不做业务判断；统一 `Result<T, String>`。
+命令层只做转发（生成命令除外），统一 `Result<T, String>`。
+
+**`generate_reply` 生命周期**（DESIGN 8.2）：抢全局 `send_lock` → 注册 `s:<id>` 取消标志 →
+从 character / scenario / user_persona 重建 system prompt → `list_messages` + `format_single_history`
+→ `Start { message_id: 0 }` → 逐 Delta 转发并累积文本 → 落库 assistant 消息 →
+`Done { message }`（含真实 id）。取消发 `Cancelled` 并落库已生成部分；
+错误由命令返回 `Err` 且发一次 `Error`。锁是**全局一把**，不是 per-session。
 
 **单角色 JSON**（DESIGN 11.1 引用 3.1.4 但正文缺失，按 5.8 备份格式自定）：
 

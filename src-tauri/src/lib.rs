@@ -66,6 +66,14 @@ pub fn run() {
             handlers::delete_persona,
             handlers::export_character,
             handlers::import_character,
+            handlers::get_sessions,
+            handlers::get_session,
+            handlers::create_session,
+            handlers::delete_session,
+            handlers::get_messages,
+            handlers::send_user_message,
+            handlers::generate_reply,
+            handlers::cancel_generation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
