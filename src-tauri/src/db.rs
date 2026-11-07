@@ -451,6 +451,45 @@ pub async fn delete_message(pool: &SqlitePool, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// 编辑群聊消息：原地改内容，之后的消息标记「上下文已变」。
+pub async fn update_group_message(
+    pool: &SqlitePool,
+    id: i64,
+    content: &str,
+) -> Result<(), String> {
+    let message = get_group_message(pool, id).await?;
+    sqlx::query("UPDATE group_messages SET content = ? WHERE id = ?")
+        .bind(content)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新群消息失败：{e}"))?;
+    sqlx::query("UPDATE group_messages SET deprecated = 1 WHERE group_id = ? AND id > ?")
+        .bind(message.group_id)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("标记群消息过期失败：{e}"))?;
+    Ok(())
+}
+
+/// 删除群聊消息，之后的消息标记「上下文已变」。
+pub async fn delete_group_message(pool: &SqlitePool, id: i64) -> Result<(), String> {
+    let message = get_group_message(pool, id).await?;
+    sqlx::query("DELETE FROM group_messages WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除群消息失败：{e}"))?;
+    sqlx::query("UPDATE group_messages SET deprecated = 1 WHERE group_id = ? AND id > ?")
+        .bind(message.group_id)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("标记群消息过期失败：{e}"))?;
+    Ok(())
+}
+
 /// 编辑或删除某条消息后，它之后的同会话消息都标记「上下文已变」。
 /// 只影响 UI 提示，**不过滤上下文**（DESIGN 4.2）：消息仍然进入下一次请求。
 pub async fn mark_deprecated_after(

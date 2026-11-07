@@ -4,10 +4,10 @@ import { ArrowLeft } from "lucide-react";
 import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
 import { MemberBar } from "../components/chat/MemberBar";
-import { MessageBubble } from "../components/chat/MessageBubble";
-import { NarrationLine } from "../components/chat/NarrationLine";
+import { MessageBubble, defaultRenderContent } from "../components/chat/MessageBubble";
 import { SummaryCard } from "../components/chat/SummaryCard";
 import { InputArea } from "../components/chat/InputArea";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToastStore } from "../store/toast";
 import type { GroupMember, GroupMessage, GroupSession, Message } from "../types";
 
@@ -53,6 +53,8 @@ export function GroupChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [generatingId, setGeneratingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 群聊删除走应用内二次确认：确认框打开期间不碰后端，取消就什么都不会发生。
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -93,6 +95,31 @@ export function GroupChatPage() {
     },
     [groupId, show],
   );
+
+  const onEditGroupMessage = useCallback(
+    (id: number, content: string) => {
+      void api
+        .updateGroupMessage(id, content)
+        .then(() => load())
+        .catch((cause) => show(`编辑失败：${String(cause)}`));
+    },
+    [load, show],
+  );
+
+  // 只打开确认框，绝不在这里调用 delete_group_message。
+  const onDeleteGroupMessage = useCallback((id: number) => {
+    setPendingDeleteId(id);
+  }, []);
+
+  const confirmDeleteGroupMessage = useCallback(() => {
+    const id = pendingDeleteId;
+    if (id === null) return;
+    setPendingDeleteId(null);
+    void api
+      .deleteGroupMessage(id)
+      .then(() => load())
+      .catch((cause) => show(`删除失败：${String(cause)}`));
+  }, [pendingDeleteId, load, show]);
 
   const onStop = useCallback(() => {
     void api
@@ -152,11 +179,11 @@ export function GroupChatPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-gray-200 bg-white px-6 py-3">
+      <header className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-6 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            className="text-gray-500 hover:text-gray-800"
+            className="text-[var(--text-muted)] hover:text-[var(--text)]"
             onClick={() => navigate("/groups")}
             aria-label="返回群聊列表"
           >
@@ -166,7 +193,7 @@ export function GroupChatPage() {
             <h1 className="truncate font-medium">
               {group?.title ?? "加载中…"}
             </h1>
-            <p className="truncate text-xs text-gray-500">
+            <p className="truncate text-xs text-[var(--text-muted)]">
               {group?.scenario ?? ""}
             </p>
           </div>
@@ -182,32 +209,50 @@ export function GroupChatPage() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto p-6">
-        {error && <p className="text-sm text-red-600">加载失败：{error}</p>}
+        {error && <p className="text-sm text-[var(--destructive)]">加载失败：{error}</p>}
         {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-gray-500">
-            还没有消息。点上方角色名让 TA 先开口。
-          </p>
+            <p className="text-center text-sm text-[var(--text-muted)]">
+              还没有消息。点上方角色名让 TA 先开口。
+            </p>
         )}
         <div className="space-y-3">
           {messages.map((message) => {
             switch (message.role) {
               case "narration":
+                // 旁白和普通消息一样可编辑、删除；渲染上 MessageBubble 已用斜体区分。
                 return (
-                  <NarrationLine key={message.id} content={message.content} />
+                  <MessageBubble
+                    key={message.id}
+                    message={asMessage(message)}
+                    renderContent={defaultRenderContent}
+                    onEdit={onEditGroupMessage}
+                    onDelete={onDeleteGroupMessage}
+                  />
                 );
               case "summary":
                 return <SummaryCard key={message.id} content={message.content} />;
               case "user":
                 return (
-                  <MessageBubble key={message.id} message={asMessage(message)} />
+                  <MessageBubble
+                    key={message.id}
+                    message={asMessage(message)}
+                    renderContent={defaultRenderContent}
+                    onEdit={onEditGroupMessage}
+                    onDelete={onDeleteGroupMessage}
+                  />
                 );
               case "assistant":
                 return (
                   <div key={message.id} className="space-y-0.5">
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-[var(--text-muted)]">
                       {nameOf(message.character_id)}
                     </p>
-                    <MessageBubble message={asMessage(message)} />
+                    <MessageBubble
+                      message={asMessage(message)}
+                      renderContent={defaultRenderContent}
+                      onEdit={onEditGroupMessage}
+                      onDelete={onDeleteGroupMessage}
+                    />
                   </div>
                 );
               default:
@@ -221,7 +266,7 @@ export function GroupChatPage() {
         </div>
       </main>
 
-      <footer className="shrink-0 border-t border-gray-200 bg-white p-4">
+      <footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-4">
         <InputArea
           onSend={onSend}
           onSendNarration={onSendNarration}
@@ -229,6 +274,16 @@ export function GroupChatPage() {
           streaming={streaming}
         />
       </footer>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除这条消息？"
+        description="之后的消息会标记为「上下文已变」。"
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDeleteGroupMessage}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

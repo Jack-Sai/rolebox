@@ -128,6 +128,12 @@ export const api = {
   sendGroupNarration: (groupId: number, content: string) =>
     invoke<GroupMessage>("send_group_narration", { groupId, content }),
 
+  updateGroupMessage: (id: number, content: string) =>
+    invoke<void>("update_group_message", { id, content }),
+
+  deleteGroupMessage: (id: number) =>
+    invoke<void>("delete_group_message", { id }),
+
   cancelGroupGeneration: (groupId: number) =>
     invoke<void>("cancel_group_generation", { groupId }),
 

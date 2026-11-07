@@ -305,6 +305,7 @@ pub async fn compress_context(
         .await
         .unwrap_or_else(|_| "local-model".to_string());
 
+    let thinking = Some(provider::Thinking::default_for_model(&model));
     // 摘要不需要打字机效果，用闭包把全文收进 buffer 即可。
     let buffer = Arc::new(std::sync::Mutex::new(String::new()));
     let sink = buffer.clone();
@@ -315,6 +316,7 @@ pub async fn compress_context(
             model,
             messages: prompt::build_summary_prompt(&pairs),
             stream: true,
+            thinking,
         },
         Arc::new(AtomicBool::new(false)),
         move |text| {
@@ -515,6 +517,25 @@ pub async fn send_group_narration(
 ) -> Result<GroupMessage, String> {
     let id = db::insert_group_message(&state.pool, group_id, None, "narration", &content).await?;
     db::get_group_message(&state.pool, id).await
+}
+
+/// 编辑群聊消息。
+#[tauri::command]
+pub async fn update_group_message(
+    state: State<'_, AppState>,
+    id: i64,
+    content: String,
+) -> Result<(), String> {
+    db::update_group_message(&state.pool, id, &content).await
+}
+
+/// 删除群聊消息。
+#[tauri::command]
+pub async fn delete_group_message(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<(), String> {
+    db::delete_group_message(&state.pool, id).await
 }
 
 #[tauri::command]
@@ -737,6 +758,7 @@ async fn stream_chat(
         });
     };
 
+    let thinking = Some(provider::Thinking::default_for_model(&model));
     let result = provider::chat_stream(
         &state.http,
         &base,
@@ -744,6 +766,7 @@ async fn stream_chat(
             model,
             messages: chat_messages,
             stream: true,
+            thinking,
         },
         cancel.clone(),
         on_delta,

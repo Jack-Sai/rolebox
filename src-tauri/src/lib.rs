@@ -140,6 +140,8 @@ pub fn run() {
             handlers::get_group_messages,
             handlers::send_group_user_message,
             handlers::send_group_narration,
+            handlers::update_group_message,
+            handlers::delete_group_message,
             handlers::generate_group_reply,
             handlers::cancel_group_generation,
             handlers::get_settings,
