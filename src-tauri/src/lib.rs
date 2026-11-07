@@ -76,6 +76,9 @@ pub fn run() {
             handlers::cancel_generation,
             handlers::update_message,
             handlers::delete_message,
+            handlers::regenerate_message,
+            handlers::get_message_versions,
+            handlers::activate_message_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

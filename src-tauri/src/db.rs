@@ -501,6 +501,37 @@ pub async fn activate_version(pool: &SqlitePool, message_id: i64) -> Result<(), 
     Ok(())
 }
 
+/// 重新生成前先把整组下线；新版本落库时直接 is_active = 1。
+pub async fn deactivate_group(pool: &SqlitePool, version_group: i64) -> Result<(), String> {
+    sqlx::query("UPDATE messages SET is_active = 0 WHERE version_group = ?")
+        .bind(version_group)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("下线版本组失败：{e}"))?;
+    Ok(())
+}
+
+/// 插入一个新版本；version_group 沿用旧版本，不走 insert_message 的自增回填。
+pub async fn insert_message_version(
+    pool: &SqlitePool,
+    session_id: i64,
+    role: &str,
+    content: &str,
+    version_group: i64,
+) -> Result<i64, String> {
+    let result = sqlx::query(
+        "INSERT INTO messages (session_id, role, content, version_group, is_active) VALUES (?, ?, ?, ?, 1)",
+    )
+    .bind(session_id)
+    .bind(role)
+    .bind(content)
+    .bind(version_group)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("新增消息版本失败：{e}"))?;
+    Ok(result.last_insert_rowid())
+}
+
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
     sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
         .bind(key)
@@ -1061,5 +1092,46 @@ mod tests {
         let other_versions = list_versions(&pool, other).await.unwrap();
         assert_eq!(other_versions.len(), 1);
         assert_eq!(other_versions[0].content, "乙组一");
+    }
+
+    #[tokio::test]
+    async fn insert_message_version_keeps_group_and_is_active() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "assistant", "旧版本")
+            .await
+            .unwrap();
+
+        let new_id =
+            insert_message_version(&pool, session_id, "assistant", "新版本", first)
+                .await
+                .unwrap();
+
+        let message = get_message(&pool, new_id).await.unwrap();
+        assert_eq!(message.version_group, first, "新版本应沿用旧 group");
+        assert!(message.is_active);
+        assert_eq!(message.content, "新版本");
+    }
+
+    #[tokio::test]
+    async fn deactivate_group_only_touches_that_group() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let group_a = insert_message(&pool, session_id, "assistant", "甲组")
+            .await
+            .unwrap();
+        insert_version(&pool, session_id, "甲组二", group_a, false).await;
+        let group_b = insert_message(&pool, session_id, "assistant", "乙组")
+            .await
+            .unwrap();
+
+        deactivate_group(&pool, group_a).await.unwrap();
+
+        assert!(list_versions(&pool, group_a)
+            .await
+            .unwrap()
+            .iter()
+            .all(|item| !item.is_active));
+        assert!(get_message(&pool, group_b).await.unwrap().is_active);
     }
 }

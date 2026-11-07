@@ -179,6 +179,51 @@ pub async fn cancel_generation(
     Ok(())
 }
 
+/// 重新生成某条消息（创建新版本）。与 generate_reply 共用全局 send_lock 与 s:<id> 取消键。
+#[tauri::command]
+pub async fn regenerate_message(
+    state: State<'_, AppState>,
+    message_id: i64,
+    on_chunk: Channel<StreamEvent>,
+) -> Result<Message, String> {
+    let _guard = state.send_lock.lock().await;
+
+    let target = db::get_message(&state.pool, message_id).await?;
+    let key = cancel_key(target.session_id);
+    let cancel = Arc::new(AtomicBool::new(false));
+    state.cancel_flags.insert(key.clone(), cancel.clone());
+
+    let channel = Arc::new(on_chunk);
+    let result = regenerate_inner(&state, message_id, channel.clone(), cancel.clone()).await;
+
+    state.cancel_flags.remove(&key);
+    if let Err(error) = &result {
+        if !cancel.load(Ordering::SeqCst) {
+            let _ = channel.send(StreamEvent::Error {
+                message: error.clone(),
+            });
+        }
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn get_message_versions(
+    state: State<'_, AppState>,
+    message_id: i64,
+) -> Result<Vec<Message>, String> {
+    let message = db::get_message(&state.pool, message_id).await?;
+    db::list_versions(&state.pool, message.version_group).await
+}
+
+#[tauri::command]
+pub async fn activate_message_version(
+    state: State<'_, AppState>,
+    message_id: i64,
+) -> Result<(), String> {
+    db::activate_version(&state.pool, message_id).await
+}
+
 /// 触发生成。全局一把 send_lock：llama-server 单 slot，会话间并发会互相踩 KV cache。
 #[tauri::command]
 pub async fn generate_reply(
@@ -208,37 +253,17 @@ pub async fn generate_reply(
     result
 }
 
-async fn generate_reply_inner(
+/// 三个生成入口共用：拿模型名、发 Start、跑 SSE、返回 (流结果, 累积文本)。
+async fn stream_chat(
     state: &AppState,
-    session_id: i64,
+    chat_messages: Vec<prompt::ChatMessage>,
     channel: Arc<Channel<StreamEvent>>,
     cancel: Arc<AtomicBool>,
-) -> Result<Message, String> {
-    let session = db::get_session(&state.pool, session_id).await?;
-    let character = db::get_character(&state.pool, session.character_id).await?;
-    let persona = match session.user_persona_id {
-        Some(id) => Some(db::get_persona(&state.pool, id).await?),
-        None => None,
+) -> (Result<(), String>, String) {
+    let base = match state.config.read() {
+        Ok(config) => config.server_url.clone(),
+        Err(_) => return (Err("读取配置失败".to_string()), String::new()),
     };
-
-    // 只要 character / scenario / user_persona 不变，构建结果就字节一致（铁律一）。
-    let system_prompt =
-        prompt::build_single_system_prompt(&character, &session.scenario, persona.as_ref());
-    let messages = db::list_messages(&state.pool, session_id).await?;
-    let user_name = persona.as_ref().map(|p| p.name.as_str()).unwrap_or("用户");
-    let chat_messages = prompt::format_single_history(
-        &system_prompt,
-        &messages,
-        &character.name,
-        user_name,
-    );
-
-    let base = state
-        .config
-        .read()
-        .map_err(|_| "读取配置失败".to_string())?
-        .server_url
-        .clone();
     // 单实例单模型；拿不到模型 id 时 llama.cpp 本地接口不校验 model 字段。
     let model = provider::fetch_model_name(&state.http, &base)
         .await
@@ -262,7 +287,7 @@ async fn generate_reply_inner(
         });
     };
 
-    let stream_result = provider::chat_stream(
+    let result = provider::chat_stream(
         &state.http,
         &base,
         provider::ChatRequest {
@@ -275,8 +300,43 @@ async fn generate_reply_inner(
         on_usage,
     )
     .await;
-
     let text = buffer.lock().unwrap().clone();
+    (result, text)
+}
+
+/// 构造单人会话的 system prompt 与历史（generate / regenerate 共用）。
+async fn build_single_context(
+    state: &AppState,
+    session: &Session,
+) -> Result<Vec<prompt::ChatMessage>, String> {
+    let character = db::get_character(&state.pool, session.character_id).await?;
+    let persona = match session.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+    // 只要 character / scenario / user_persona 不变，构建结果就字节一致（铁律一）。
+    let system_prompt =
+        prompt::build_single_system_prompt(&character, &session.scenario, persona.as_ref());
+    let messages = db::list_messages(&state.pool, session.id).await?;
+    let user_name = persona.as_ref().map(|p| p.name.as_str()).unwrap_or("用户");
+    Ok(prompt::format_single_history(
+        &system_prompt,
+        &messages,
+        &character.name,
+        user_name,
+    ))
+}
+
+async fn generate_reply_inner(
+    state: &AppState,
+    session_id: i64,
+    channel: Arc<Channel<StreamEvent>>,
+    cancel: Arc<AtomicBool>,
+) -> Result<Message, String> {
+    let session = db::get_session(&state.pool, session_id).await?;
+    let chat_messages = build_single_context(state, &session).await?;
+    let (stream_result, text) =
+        stream_chat(state, chat_messages, channel.clone(), cancel.clone()).await;
     let cancelled = cancel.load(Ordering::SeqCst);
 
     // 取消后仍落库已生成部分（DESIGN 8.2）；完全没内容就不制造空消息。
@@ -286,6 +346,78 @@ async fn generate_reply_inner(
         let id = db::insert_message(&state.pool, session_id, "assistant", &text).await?;
         Some(db::get_message(&state.pool, id).await?)
     };
+
+    if cancelled {
+        let _ = channel.send(StreamEvent::Cancelled);
+        return saved.ok_or_else(|| "生成已取消且没有可保留的内容".to_string());
+    }
+    if let Err(error) = &stream_result {
+        return Err(error.clone());
+    }
+    let message = saved.ok_or_else(|| "模型未返回任何内容".to_string())?;
+    let _ = channel.send(StreamEvent::Done {
+        message: message.clone(),
+    });
+    Ok(message)
+}
+
+/// 重新生成某条消息：用该消息**之前**的历史重新构造 prompt，新版本沿用同一 version_group。
+async fn regenerate_inner(
+    state: &AppState,
+    message_id: i64,
+    channel: Arc<Channel<StreamEvent>>,
+    cancel: Arc<AtomicBool>,
+) -> Result<Message, String> {
+    let target = db::get_message(&state.pool, message_id).await?;
+    let session = db::get_session(&state.pool, target.session_id).await?;
+
+    let character = db::get_character(&state.pool, session.character_id).await?;
+    let persona = match session.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+    let system_prompt =
+        prompt::build_single_system_prompt(&character, &session.scenario, persona.as_ref());
+    let messages = db::list_messages(&state.pool, session.id).await?;
+    let user_name = persona.as_ref().map(|p| p.name.as_str()).unwrap_or("用户");
+    let history: Vec<Message> = messages
+        .into_iter()
+        .filter(|item| item.id < target.id)
+        .collect();
+    let chat_messages = prompt::format_single_history(
+        &system_prompt,
+        &history,
+        &character.name,
+        user_name,
+    );
+
+    // 旧版本先下线，避免生成期间同一组两条同时 active。
+    db::deactivate_group(&state.pool, target.version_group).await?;
+
+    let (stream_result, text) =
+        stream_chat(state, chat_messages, channel.clone(), cancel.clone()).await;
+    let cancelled = cancel.load(Ordering::SeqCst);
+
+    let saved = if text.is_empty() {
+        None
+    } else {
+        let id = db::insert_message_version(
+            &state.pool,
+            session.id,
+            "assistant",
+            &text,
+            target.version_group,
+        )
+        .await?;
+        Some(db::get_message(&state.pool, id).await?)
+    };
+
+    if saved.is_none() {
+        // 没有产出新版本时恢复原版本，否则这一组会没有 is_active。
+        let _ = db::activate_version(&state.pool, target.id).await;
+    } else {
+        db::mark_deprecated_after(&state.pool, session.id, target.id).await?;
+    }
 
     if cancelled {
         let _ = channel.send(StreamEvent::Cancelled);

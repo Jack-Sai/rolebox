@@ -107,8 +107,17 @@
 | `update_message` | `id, content` | `()` | 原地改内容，并把之后的消息标 `deprecated = 1` |
 | `delete_message` | `id` | `()` | 物理删除，并把之后的消息标 `deprecated = 1` |
 
+| `regenerate_message` | `message_id, onChunk` | `Message` | 重新生成：旧版本下线 → 用目标消息之前的历史生成 → 新版本沿用同 group |
+| `get_message_versions` | `message_id` | `Vec<Message>` | 返回该版本组全部版本，按 id 升序 |
+| `activate_message_version` | `message_id` | `()` | 事务内整组清 0 再置目标为 1 |
+
 `deprecated` 只是 UI 提示「这些消息生成时上下文已变」，**不参与上下文过滤**（DESIGN 4.2）。
 编辑 / 删除会破坏 KV cache 前缀，这是用户主动触发的破坏，可接受。
+
+**重新生成**（DESIGN 9.2）：先 `deactivate_group` 让旧版本下线，再用**目标消息之前**的历史构造 prompt
+（目标消息本身及其后都不参与），新消息 `version_group` 沿用旧值、`is_active = 1`，
+然后把目标消息之后的消息标 `deprecated`。若一个字都没生成出来，恢复原版本为 active，
+避免整组没有 `is_active`。切换版本只改 `is_active`，不改历史（DESIGN 9.3）。
 
 命令层只做转发（生成命令除外），统一 `Result<T, String>`。
 
