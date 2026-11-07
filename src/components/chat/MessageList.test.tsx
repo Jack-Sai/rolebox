@@ -48,4 +48,17 @@ describe("MessageList", () => {
     expect(screen.getByText(/窗外下雨了/)).toBeTruthy();
     expect(screen.queryByTestId("bubble-2")).toBeNull();
   });
+
+  it("摘要消息渲染为 SummaryCard 而不是普通气泡", () => {
+    const summary = {
+      ...base,
+      id: 3,
+      role: "summary" as const,
+      content: "两人在雨夜初次相遇",
+    };
+    render(<MessageList messages={[summary]} />);
+
+    expect(screen.getByTestId("summary-card")).toBeTruthy();
+    expect(screen.queryByTestId("bubble-3")).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { defaultRenderContent, MessageBubble } from "./MessageBubble";
 import { NarrationLine } from "./NarrationLine";
+import { SummaryCard } from "./SummaryCard";
 import type { Message } from "../../types";
 
 export interface MessageListProps {
@@ -27,9 +28,10 @@ export function MessageList({
           case "narration":
             // 旁白不是对话气泡，用居中斜体行区分。
             return <NarrationLine key={message.id} content={message.content} />;
+          case "summary":
+            return <SummaryCard key={message.id} content={message.content} />;
           case "user":
           case "assistant":
-          case "summary":
             // renderContent 传模块级函数，不用内联箭头（坑 #12 / #13）。
             return (
               <MessageBubble

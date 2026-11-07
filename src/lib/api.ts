@@ -67,6 +67,9 @@ export const api = {
 
   deleteMessage: (id: number) => invoke<void>("delete_message", { id }),
 
+  compressContext: (sessionId: number) =>
+    invoke<void>("compress_context", { sessionId }),
+
   getContextInfo: (sessionId: number) =>
     invoke<ContextInfo>("get_context_info", { sessionId }),
 

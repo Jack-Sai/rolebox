@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Minimize2, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
 import { ContextBar } from "../components/chat/ContextBar";
@@ -171,6 +171,24 @@ export function ChatPage() {
     [load, show],
   );
 
+  const handleCompress = async () => {
+    if (
+      !window.confirm("压缩后更早的消息会被摘要替代，只保留最近 4 条。继续？")
+    ) {
+      return;
+    }
+    setStreaming(true);
+    try {
+      await api.compressContext(sessionId);
+      await load();
+      show("上下文已压缩");
+    } catch (cause) {
+      show(`压缩失败：${String(cause)}`);
+    } finally {
+      setStreaming(false);
+    }
+  };
+
   const onRegenerate = useCallback(
     (messageId: number) => {
       setStreaming(true);
@@ -258,14 +276,24 @@ export function ChatPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          onClick={() => void handleGenerate()}
-          disabled={streaming}
-        >
-          <Sparkles size={16} />
-          {streaming ? "生成中…" : "生成回复"}
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => void handleCompress()}
+            disabled={streaming}
+          >
+            <Minimize2 size={16} />
+            压缩上下文
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => void handleGenerate()}
+            disabled={streaming}
+          >
+            <Sparkles size={16} />
+            {streaming ? "生成中…" : "生成回复"}
+          </Button>
+        </div>
       </header>
 
       {contextInfo && (
