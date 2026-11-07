@@ -189,6 +189,8 @@
   按 id 排会甩到会话末尾，既排错位置也会让上下文顺序错乱。
 - 消息操作（C18）：`MessageBubble` 内部管编辑态，改名/删除通过 `onEdit` / `onDelete` 稳定回调上抛，
   确认弹窗与重新加载留在 `ChatPage`；临时消息（id < 0）不显示编辑/删除；复制走 `navigator.clipboard`。
+- `components/chat/ContextBar.tsx`：上下文进度条，≥70% 转琥珀、≥90% 转红；`limit = 0` 时退回 0%，
+  不产生 NaN；`isAccurate = false` 时在文字后标「（估算）」。`ChatPage` 在加载消息与生成结束后各刷新一次。
 - `lib/stream.ts`：`createStreamHandler` 分发六种 StreamEvent（default 用 `never` 做穷尽检查）；
   `mergeText` 只在末尾是文本块时合并，`flushBuffer` 在插入非文本块前排空缓冲（坑 #5）。
   ChatPage 用 `id = -1` 的临时消息逐字追加，`Done` 换成真实 id；`Cancelled` 保留已生成内容，

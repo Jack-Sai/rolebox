@@ -3,11 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
+import { ContextBar } from "../components/chat/ContextBar";
 import { MessageList } from "../components/chat/MessageList";
 import { InputArea } from "../components/chat/InputArea";
 import { Button } from "../components/ui/button";
 import { useToastStore } from "../store/toast";
-import type { Character, Message, Session } from "../types";
+import type { Character, ContextInfo, Message, Session } from "../types";
 
 // DESIGN 8.3：流式期间用 id < 0 的临时消息，Done 后换成真实 id。
 const TEMP_ID = -1;
@@ -39,6 +40,16 @@ export function ChatPage() {
   const [versionsByGroup, setVersionsByGroup] = useState<
     Record<number, Message[]>
   >({});
+  const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null);
+
+  // 上下文用量是增强信息，拿不到就不显示进度条，不打断聊天。
+  const loadContext = useCallback(async () => {
+    try {
+      setContextInfo(await api.getContextInfo(sessionId));
+    } catch {
+      setContextInfo(null);
+    }
+  }, [sessionId]);
 
   // 版本信息是增强功能：每条激活的 assistant 消息查一次自己所在的组，失败就静默跳过。
   const loadVersions = useCallback(async (list: Message[]) => {
@@ -72,10 +83,11 @@ export function ChatPage() {
       );
       setError(null);
       void loadVersions(list);
+      void loadContext();
     } catch (cause) {
       setError(String(cause));
     }
-  }, [sessionId, loadVersions]);
+  }, [sessionId, loadVersions, loadContext]);
 
   useEffect(() => {
     void load();
@@ -219,6 +231,8 @@ export function ChatPage() {
       if (!cancelled) show(`生成失败：${String(cause)}`);
     } finally {
       setStreaming(false);
+      // 生成结束后真实 prompt_tokens 已经写进 AppState，刷新进度条。
+      void loadContext();
     }
   };
 
@@ -253,6 +267,14 @@ export function ChatPage() {
           {streaming ? "生成中…" : "生成回复"}
         </Button>
       </header>
+
+      {contextInfo && (
+        <ContextBar
+          used={contextInfo.used}
+          limit={contextInfo.limit}
+          isAccurate={contextInfo.isAccurate}
+        />
+      )}
 
       <main className="min-h-0 flex-1 overflow-y-auto p-6">
         {error && <p className="text-sm text-red-600">加载失败：{error}</p>}

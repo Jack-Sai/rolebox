@@ -2,6 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   Character,
   CharacterInput,
+  ContextInfo,
   Message,
   Session,
   SessionInput,
@@ -65,6 +66,9 @@ export const api = {
     invoke<void>("update_message", { id, content }),
 
   deleteMessage: (id: number) => invoke<void>("delete_message", { id }),
+
+  getContextInfo: (sessionId: number) =>
+    invoke<ContextInfo>("get_context_info", { sessionId }),
 
   getMessageVersions: (messageId: number) =>
     invoke<Message[]>("get_message_versions", { messageId }),
