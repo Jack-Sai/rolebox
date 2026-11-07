@@ -9,11 +9,40 @@ use serde_json::Value;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+/// 关闭模型思考功能。不同系列模型的关闭方式不同：
+/// - Qwen3：`{"thinking": {"type": "disabled"}}`
+/// - DeepSeek-R1：llama.cpp 的 deepseek-r1 模板在 `think` 标签内输出思考，
+///   客户端层面同发 `{"thinking": {"type": "disabled"}}`，若 server 支持则生效；
+///   其余可通过 server 启动参数（`--chat-template` 选非思考模板）关闭。
+/// 思考开启会占用大量上下文且明显变慢，因此默认关闭。
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Thinking {
+    Disabled,
+    Enabled { budget: Option<u32> },
+}
+
+impl Thinking {
+    /// 根据模型名选择默认的思考开关。qwen3 与 deepseek/r1 均默认关闭。
+    pub fn default_for_model(model: &str) -> Self {
+        let lower = model.to_lowercase();
+        if lower.contains("qwen3") {
+            return Thinking::Disabled;
+        }
+        if lower.contains("deepseek") || lower.contains("r1") {
+            return Thinking::Disabled;
+        }
+        Thinking::Disabled
+    }
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<Thinking>,
 }
 
 /// 抽成纯函数，才能在不起 llama-server 的情况下断言「没有采样参数」。
@@ -30,6 +59,9 @@ pub fn build_request_body(req: &ChatRequest) -> Value {
         "stream_options".into(),
         serde_json::json!({ "include_usage": true }),
     );
+    if let Some(thinking) = &req.thinking {
+        body.insert("thinking".into(), serde_json::to_value(thinking).unwrap());
+    }
     Value::Object(body)
 }
 
@@ -158,6 +190,7 @@ mod tests {
                 content: "你好".into(),
             }],
             stream: true,
+            thinking: None,
         }
     }
 
