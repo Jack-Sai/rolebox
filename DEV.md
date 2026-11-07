@@ -95,7 +95,17 @@
 
 ## 6. 前端模块
 
-（待 C07 起回填）
+- `App.tsx`：HashRouter + 路由表（当前仅 `/characters`、`/characters/new`、
+  `/characters/:id/edit`），Sidebar / Toaster 常驻。其余页签暂为禁用占位。
+- `lib/api.ts`：唯一直接调用 `invoke` 的薄封装；组件测试只 mock `@tauri-apps/api/core`。
+- `lib/avatar.ts`（姓名 → 稳定颜色）、`lib/utils.ts`（`cn` / `truncate`）、
+  `lib/prompt.ts`（system prompt 只读预览，必须与后端 `prompt.rs` 逐字一致）
+  均为纯逻辑并配单测。
+- `pages/CharacterListPage.tsx`：列表 / 删除 / 空状态；删除会级联清掉会话，故二次确认。
+- `pages/CharacterEditPage.tsx`：新建 / 编辑表单 + 右侧预览；后端没有单角色查询命令，
+  编辑时复用 `get_characters` 按 id 取回。
+- `store/toast.ts`：Zustand 全局提示；`components/ui/` 为自写基础组件，图标一律 lucide-react。
+- 样式：Tailwind v4 由 `@tailwindcss/vite` 插件加载，`src/index.css` 定义 CSS 变量。
 
 ## 7. 测试与验证
 

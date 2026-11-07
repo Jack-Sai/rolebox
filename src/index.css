@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+/* 外观设置（C40）会在这里切换主题；当前固定浅色。 */
+:root {
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color-scheme: light;
+  --surface: #ffffff;
+  --surface-muted: #f6f7f9;
+  --border: #e5e7eb;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --accent: #4f46e5;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-muted);
+  color: var(--text);
+}
