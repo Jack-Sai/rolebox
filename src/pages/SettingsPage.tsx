@@ -5,18 +5,19 @@ import { cn } from "../lib/utils";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { useSettingsStore, type Theme } from "../store/settings";
+import { useI18n } from "../i18n";
+import {
+  useSettingsStore,
+  type Language,
+  type Theme,
+} from "../store/settings";
 import { useToastStore } from "../store/toast";
 import type { UserPersona, UserPersonaInput } from "../types";
 
 type TabKey = "personas" | "server" | "appearance" | "data";
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "personas", label: "我的分身" },
-  { key: "server", label: "llama-server" },
-  { key: "appearance", label: "外观" },
-  { key: "data", label: "数据" },
-];
+// 文案在 i18n 字典的 settings.tabs 里，key 与 TabKey 对齐。
+const TAB_KEYS: TabKey[] = ["personas", "server", "appearance", "data"];
 
 const THEMES: { value: Theme; label: string }[] = [
   { value: "system", label: "跟随系统" },
@@ -253,34 +254,73 @@ function ServerPanel() {
 }
 
 function AppearancePanel() {
+  const t = useI18n();
   const theme = useSettingsStore((state) => state.theme);
   const setTheme = useSettingsStore((state) => state.setTheme);
+  const language = useSettingsStore((state) => state.language);
+  const setLanguage = useSettingsStore((state) => state.setLanguage);
+
+  const themeLabel: Record<Theme, string> = {
+    system: t.settings.appearance.system,
+    light: t.settings.appearance.light,
+    dark: t.settings.appearance.dark,
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <header>
-        <h2 className="font-medium">外观</h2>
+        <h2 className="font-medium">{t.settings.tabs.appearance}</h2>
         <p className="mt-0.5 text-xs text-gray-500">
-          主题只保存在本机（localStorage），不入库。
+          {t.settings.appearance.hint}
         </p>
       </header>
-      <div className="flex gap-2">
-        {THEMES.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            aria-pressed={theme === item.value}
-            onClick={() => setTheme(item.value)}
-            className={cn(
-              "rounded-lg border px-3 py-2 text-sm",
-              theme === item.value
-                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                : "border-gray-200 text-gray-600 hover:bg-gray-50",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
+
+      <div className="space-y-2">
+        <span className="block text-sm font-medium">
+          {t.settings.appearance.theme}
+        </span>
+        <div className="flex gap-2">
+          {THEMES.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              aria-pressed={theme === item.value}
+              onClick={() => setTheme(item.value)}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-sm",
+                theme === item.value
+                  ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              {themeLabel[item.value]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <span className="block text-sm font-medium">
+          {t.settings.appearance.language}
+        </span>
+        <div className="flex gap-2">
+          {(["zh", "en"] as Language[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={language === value}
+              onClick={() => setLanguage(value)}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-sm",
+                language === value
+                  ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              {value === "zh" ? "中文" : "English"}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -299,26 +339,27 @@ function DataPanel() {
 
 export function SettingsPage() {
   const [tab, setTab] = useState<TabKey>("personas");
+  const t = useI18n();
 
   return (
     <div className="p-8">
-      <h1 className="mb-6 text-xl font-semibold">设置</h1>
+      <h1 className="mb-6 text-xl font-semibold">{t.settings.title}</h1>
       <div className="flex gap-6">
         <nav className="flex w-40 shrink-0 flex-col gap-1">
-          {TABS.map((item) => (
+          {TAB_KEYS.map((key) => (
             <button
-              key={item.key}
+              key={key}
               type="button"
-              onClick={() => setTab(item.key)}
-              aria-current={tab === item.key ? "page" : undefined}
+              onClick={() => setTab(key)}
+              aria-current={tab === key ? "page" : undefined}
               className={cn(
                 "rounded-lg px-3 py-2 text-left text-sm",
-                tab === item.key
+                tab === key
                   ? "bg-indigo-50 font-medium text-indigo-700"
                   : "text-gray-600 hover:bg-gray-100",
               )}
             >
-              {item.label}
+              {t.settings.tabs[key]}
             </button>
           ))}
         </nav>
