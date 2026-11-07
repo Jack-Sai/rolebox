@@ -37,7 +37,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       theme: "system",
       language: "zh",
-      maxOutputTokens: 300,
+      maxOutputTokens: 0,
       setTheme: (theme) => {
         applyTheme(theme);
         set({ theme });

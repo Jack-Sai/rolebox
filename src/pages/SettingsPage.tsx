@@ -289,7 +289,7 @@ function ServerPanel() {
           placeholder="300"
         />
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-          默认 300 个 token（约 150 中文字）。设为 0 不限制。
+          0 表示不限制，由提示词控制长度（建议简洁）。
         </p>
       </label>
       <div className="flex gap-2">
