@@ -2,6 +2,7 @@ mod db;
 pub mod export;
 pub mod handlers;
 pub mod models;
+pub mod prompt;
 
 use dashmap::DashMap;
 use std::sync::{atomic::AtomicBool, Arc, RwLock};

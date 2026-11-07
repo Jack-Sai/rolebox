@@ -60,6 +60,9 @@
   （`CharacterInput` / `UserPersonaInput` / `SessionInput` / `SessionUpdate`，DESIGN 5.6 未给字段，
   按表「除 id / 时间戳外的列」补全）、`StreamEvent` 6 变体、`ContextInfo`。
   群聊输入类型、`ConnectionInfo`、`ImportStats` 留到各自首次使用处定义。
+- `prompt.rs`：**最关键模块**（铁律一）。`build_single_system_prompt` 按 DESIGN 5.5.1
+  模板一次定稿，空值用固定占位、不注入时间/随机/记忆；与前端 `lib/prompt.ts` 逐字一致，
+  两边单测共用同一份期望字符串防止漂移。
 - `export.rs`：单角色 JSON 的编解码纯函数 + 文件读写；`encode_character` /
   `decode_character` 不碰文件系统，便于验证格式与一致性。
 - 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。
