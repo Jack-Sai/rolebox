@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MessageList } from "./MessageList";
 import type { Message } from "../../types";
@@ -35,18 +35,20 @@ describe("MessageList", () => {
     expect(screen.getByText("你好")).toBeTruthy();
   });
 
-  it("旁白消息渲为可编辑、删除的普通气泡，和正常消息一样", () => {
+  it("旁白消息保留居中斜体样式，并可编辑、删除", () => {
     const narration = {
       ...base,
       id: 2,
       role: "narration" as const,
       content: "窗外下雨了",
     };
-    render(<MessageList messages={[narration]} />);
+    const onEdit = vi.fn();
+    const onDelete = vi.fn();
+    render(<MessageList messages={[narration]} onEdit={onEdit} onDelete={onDelete} />);
 
-    expect(screen.getByTestId("bubble-2")).toBeTruthy();
+    expect(screen.getByTestId("narration-line")).toBeTruthy();
     expect(screen.getByText(/窗外下雨了/)).toBeTruthy();
-    expect(screen.queryByTestId("narration-line")).toBeNull();
+    expect(screen.queryByTestId("bubble-2")).toBeNull();
     expect(screen.getByLabelText("编辑")).toBeTruthy();
     expect(screen.getByLabelText("删除")).toBeTruthy();
   });

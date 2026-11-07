@@ -1,4 +1,5 @@
 import { defaultRenderContent, MessageBubble } from "./MessageBubble";
+import { NarrationLine } from "./NarrationLine";
 import { SummaryCard } from "./SummaryCard";
 import type { Message } from "../../types";
 
@@ -25,12 +26,12 @@ export function MessageList({
         // 坑 #4：switch 必须有 default，否则新增 BlockKind 会静默不渲染。
         switch (message.role) {
           case "narration":
-            // 旁白和普通消息一样可编辑、删除，渲染上保留斜体区分。
+            // 旁白保留原来的居中斜体视觉，和普通消息一样可编辑、删除。
             return (
-              <MessageBubble
+              <NarrationLine
                 key={message.id}
-                message={message}
-                renderContent={defaultRenderContent}
+                id={message.id}
+                content={message.content}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />

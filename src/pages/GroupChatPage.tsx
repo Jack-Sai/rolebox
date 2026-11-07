@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
 import { MemberBar } from "../components/chat/MemberBar";
 import { MessageBubble, defaultRenderContent } from "../components/chat/MessageBubble";
+import { NarrationLine } from "../components/chat/NarrationLine";
 import { SummaryCard } from "../components/chat/SummaryCard";
 import { InputArea } from "../components/chat/InputArea";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
@@ -219,12 +220,12 @@ export function GroupChatPage() {
           {messages.map((message) => {
             switch (message.role) {
               case "narration":
-                // 旁白和普通消息一样可编辑、删除；渲染上 MessageBubble 已用斜体区分。
+                // 旁白保留原来的居中斜体视觉，和普通消息一样可编辑、删除。
                 return (
-                  <MessageBubble
+                  <NarrationLine
                     key={message.id}
-                    message={asMessage(message)}
-                    renderContent={defaultRenderContent}
+                    id={message.id}
+                    content={message.content}
                     onEdit={onEditGroupMessage}
                     onDelete={onDeleteGroupMessage}
                   />
