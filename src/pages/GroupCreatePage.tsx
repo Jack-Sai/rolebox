@@ -64,7 +64,7 @@ export function GroupCreatePage() {
     <div className="p-8">
       <button
         type="button"
-        className="mb-4 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+        className="mb-4 flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
         onClick={() => navigate("/groups")}
       >
         <ArrowLeft size={16} />
@@ -74,7 +74,7 @@ export function GroupCreatePage() {
 
       <form
         onSubmit={(event) => void handleSubmit(event)}
-        className="max-w-xl space-y-4 rounded-xl border border-gray-200 bg-white p-5"
+        className="max-w-xl space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
       >
         <label className="block text-sm">
           <span className="mb-1 block font-medium">群聊标题</span>
@@ -99,7 +99,7 @@ export function GroupCreatePage() {
             aria-label="选择我的分身"
             value={personaId}
             onChange={(event) => setPersonaId(event.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           >
             <option value="">不指定</option>
             {personas.map((persona) => (
@@ -116,12 +116,12 @@ export function GroupCreatePage() {
           </span>
           <div className="space-y-2">
             {characters.length === 0 && (
-              <p className="text-xs text-gray-500">还没有角色，请先去创建。</p>
+              <p className="text-xs text-[var(--text-muted)]">还没有角色，请先去创建。</p>
             )}
             {characters.map((character) => (
               <label
                 key={character.id}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-100 px-3 py-2"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2"
               >
                 <input
                   type="checkbox"
@@ -129,7 +129,7 @@ export function GroupCreatePage() {
                   onChange={() => toggle(character.id)}
                 />
                 <span className="font-medium">{character.name}</span>
-                <span className="truncate text-xs text-gray-500">
+                <span className="truncate text-xs text-[var(--text-muted)]">
                   {character.tagline}
                 </span>
               </label>

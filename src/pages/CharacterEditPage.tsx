@@ -77,7 +77,7 @@ export function CharacterEditPage() {
     <div className="p-8">
       <button
         type="button"
-        className="mb-4 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+        className="mb-4 flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
         onClick={() => navigate("/characters")}
       >
         <ArrowLeft size={16} />
@@ -86,12 +86,12 @@ export function CharacterEditPage() {
       <h1 className="mb-6 text-xl font-semibold">
         {isEdit ? "编辑角色" : "新建角色"}
       </h1>
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 text-sm text-[var(--destructive)]">{error}</p>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <form
           onSubmit={(event) => void handleSubmit(event)}
-          className="space-y-4 rounded-xl border border-gray-200 bg-white p-5"
+          className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
         >
           <label className="block text-sm">
             <span className="mb-1 block font-medium">角色名</span>
@@ -135,7 +135,7 @@ export function CharacterEditPage() {
                   avatar_color: event.target.value,
                 }))
               }
-              className="h-9 w-16 cursor-pointer rounded border border-gray-200 bg-white"
+              className="h-9 w-16 cursor-pointer rounded border border-[var(--border)] bg-[var(--surface)]"
             />
           </label>
           <Button type="submit" disabled={saving}>
@@ -143,12 +143,12 @@ export function CharacterEditPage() {
           </Button>
         </form>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
           <h2 className="mb-2 text-sm font-medium">System Prompt 预览</h2>
-          <p className="mb-3 text-xs text-gray-500">
+          <p className="mb-3 text-xs text-[var(--text-muted)]">
             仅展示基础结构。实际会话会追加场景与用户分身，且创建后不再改变。
           </p>
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-xs leading-relaxed">
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-relaxed">
             {preview}
           </pre>
         </section>

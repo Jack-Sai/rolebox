@@ -54,20 +54,20 @@ export function SessionCreatePage() {
     <div className="p-8">
       <button
         type="button"
-        className="mb-4 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+        className="mb-4 flex items-center gap-1 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
         onClick={() => navigate("/sessions")}
       >
         <ArrowLeft size={16} />
         返回会话列表
       </button>
       <h1 className="mb-1 text-xl font-semibold">新建会话</h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-6 text-sm text-[var(--text-muted)]">
         角色：{character?.name ?? "加载中…"}。切换用户分身会让已有会话的上下文缓存失效。
       </p>
 
       <form
         onSubmit={(event) => void handleSubmit(event)}
-        className="max-w-xl space-y-4 rounded-xl border border-gray-200 bg-white p-5"
+        className="max-w-xl space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
       >
         <label className="block text-sm">
           <span className="mb-1 block font-medium">会话标题</span>
@@ -92,7 +92,7 @@ export function SessionCreatePage() {
             aria-label="选择我的分身"
             value={personaId}
             onChange={(event) => setPersonaId(event.target.value)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
           >
             <option value="">不指定</option>
             {personas.map((persona) => (

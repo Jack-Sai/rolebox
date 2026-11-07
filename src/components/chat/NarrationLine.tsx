@@ -3,8 +3,8 @@
 export function NarrationLine({ content }: { content: string }) {
   return (
     <div className="flex justify-center" data-testid="narration-line">
-      <p className="max-w-[80%] whitespace-pre-wrap rounded-lg bg-gray-50 px-4 py-2 text-center text-xs italic text-gray-500">
-        <span className="mr-1 text-gray-400 not-italic">旁白</span>
+      <p className="max-w-[80%] whitespace-pre-wrap rounded-lg bg-[var(--surface-muted)] px-4 py-2 text-center text-xs italic text-[var(--text-muted)]">
+        <span className="mr-1 text-[var(--icon-muted)] not-italic">旁白</span>
         {content}
       </p>
     </div>

@@ -16,7 +16,7 @@ export function Toaster() {
   return (
     <div
       role="status"
-      className="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg bg-gray-900 px-4 py-3 text-sm text-white shadow-lg"
+      className="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] shadow-lg"
     >
       {message}
     </div>

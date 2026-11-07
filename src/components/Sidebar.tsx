@@ -15,7 +15,7 @@ export function Sidebar() {
   const t = useI18n();
 
   return (
-    <aside className="flex w-48 shrink-0 flex-col border-r border-gray-200 bg-white">
+    <aside className="flex w-48 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)]">
       <div className="px-4 py-5 text-lg font-semibold">RoleBox</div>
       <nav className="flex flex-col gap-1 px-2">
         {items.map(({ to, key, icon: Icon }) => (
@@ -24,8 +24,8 @@ export function Sidebar() {
             to={to}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100",
-                isActive && "bg-indigo-50 font-medium text-indigo-700",
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-muted)]",
+                isActive && "bg-[var(--accent)]/10 font-medium text-[var(--accent)]",
               )
             }
           >

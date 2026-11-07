@@ -46,7 +46,7 @@ export function GroupListPage() {
       <header className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">群聊</h1>
-          <p className="mt-1 text-sm text-gray-500">多个角色同场，按角色逐个发言</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">多个角色同场，按角色逐个发言</p>
         </div>
         <Link to="/groups/new">
           <Button>
@@ -56,10 +56,10 @@ export function GroupListPage() {
         </Link>
       </header>
 
-      {loading && <p className="text-sm text-gray-500">加载中…</p>}
-      {error && <p className="text-sm text-red-600">加载失败：{error}</p>}
+      {loading && <p className="text-sm text-[var(--text-muted)]">加载中…</p>}
+      {error && <p className="text-sm text-[var(--destructive)]">加载失败：{error}</p>}
       {!loading && !error && groups.length === 0 && (
-        <p className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">
+        <p className="rounded-xl border border-dashed border-[var(--border)] border-[var(--border)] bg-[var(--surface)] p-10 text-center text-sm text-[var(--text-muted)]">
           还没有群聊。
         </p>
       )}
@@ -68,11 +68,11 @@ export function GroupListPage() {
         {groups.map((group) => (
           <li
             key={group.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4"
+            className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
           >
             <Link to={`/groups/${group.id}`} className="min-w-0 flex-1">
               <p className="truncate font-medium">{group.title}</p>
-              <p className="mt-0.5 truncate text-xs text-gray-500">
+              <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
                 {group.scenario || "（未指定场景）"}
               </p>
             </Link>

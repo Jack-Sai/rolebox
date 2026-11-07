@@ -80,7 +80,7 @@ export function CharacterListPage() {
       <header className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">角色</h1>
-          <p className="mt-1 text-sm text-gray-500">管理可参与对话的角色及其设定</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">管理可参与对话的角色及其设定</p>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => void handleImport()}>
@@ -96,10 +96,10 @@ export function CharacterListPage() {
         </div>
       </header>
 
-      {loading && <p className="text-sm text-gray-500">加载中…</p>}
-      {error && <p className="text-sm text-red-600">加载失败：{error}</p>}
+      {loading && <p className="text-sm text-[var(--text-muted)]">加载中…</p>}
+      {error && <p className="text-sm text-[var(--destructive)]">加载失败：{error}</p>}
       {!loading && !error && characters.length === 0 && (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">
+        <div className="rounded-xl border border-dashed border-[var(--border)] border-[var(--border)] bg-[var(--surface)] p-10 text-center text-sm text-[var(--text-muted)]">
           还没有角色，点「新建角色」开始。
         </div>
       )}
@@ -108,7 +108,7 @@ export function CharacterListPage() {
         {characters.map((character) => (
           <article
             key={character.id}
-            className="rounded-xl border border-gray-200 bg-white p-4"
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
           >
             <div className="flex items-start gap-3">
               <div
@@ -119,12 +119,12 @@ export function CharacterListPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate font-medium">{character.name}</h2>
-                <p className="mt-0.5 truncate text-sm text-gray-500">
+                <p className="mt-0.5 truncate text-sm text-[var(--text-muted)]">
                   {truncate(character.tagline, 40)}
                 </p>
               </div>
             </div>
-            <p className="mt-3 whitespace-pre-wrap text-xs text-gray-500">
+            <p className="mt-3 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
               {truncate(character.persona, 120)}
             </p>
             <div className="mt-4 flex gap-2">

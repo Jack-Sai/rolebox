@@ -3,8 +3,8 @@
 export function SummaryCard({ content }: { content: string }) {
   return (
     <div className="flex justify-center" data-testid="summary-card">
-      <div className="max-w-[85%] rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-        <p className="mb-1 font-medium text-amber-700">对话摘要</p>
+      <div className="max-w-[85%] rounded-lg border border-[var(--muted-bg)] bg-[var(--muted-bg)] px-4 py-3 text-xs text-[var(--text-muted)]">
+        <p className="mb-1 font-medium text-[var(--text-muted)]">对话摘要</p>
         <p className="whitespace-pre-wrap">{content}</p>
       </div>
     </div>

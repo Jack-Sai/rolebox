@@ -29,9 +29,9 @@ export function MemberBar({
             onClick={() => onGenerate(member.character_id)}
             className={cn(
               "flex items-center gap-2 rounded-full border px-3 py-1 text-sm transition-opacity",
-              generating
-                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                : "border-gray-200 bg-white text-gray-700",
+                generating
+                  ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                  : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)]",
               muted && "opacity-40",
               disabled && "cursor-not-allowed",
             )}

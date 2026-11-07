@@ -22,7 +22,7 @@ export function VersionSwitcher({
 
   return (
     <div
-      className="flex items-center gap-1 text-xs text-gray-500"
+      className="flex items-center gap-1 text-xs text-[var(--text-muted)]"
       data-testid="version-switcher"
     >
       <button
@@ -30,7 +30,7 @@ export function VersionSwitcher({
         aria-label="上一个版本"
         disabled={!previous}
         onClick={() => previous && onActivate(previous.id)}
-        className="rounded p-0.5 hover:bg-gray-100 disabled:opacity-30"
+        className="rounded p-0.5 hover:bg-[var(--surface-hover)] disabled:opacity-30"
       >
         <ChevronLeft size={14} />
       </button>
@@ -42,7 +42,7 @@ export function VersionSwitcher({
         aria-label="下一个版本"
         disabled={!next}
         onClick={() => next && onActivate(next.id)}
-        className="rounded p-0.5 hover:bg-gray-100 disabled:opacity-30"
+        className="rounded p-0.5 hover:bg-[var(--surface-hover)] disabled:opacity-30"
       >
         <ChevronRight size={14} />
       </button>

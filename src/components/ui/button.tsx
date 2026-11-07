@@ -4,9 +4,9 @@ import { cn } from "../../lib/utils";
 type Variant = "primary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700",
-  ghost: "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50",
-  danger: "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100",
+  primary: "bg-[var(--accent)] text-white",
+  ghost: "bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:bg-[var(--surface-muted)]",
+  danger: "bg-[var(--destructive-bg)] text-[var(--destructive)] border border-[var(--destructive)]/30 hover:bg-[var(--destructive-bg)] hover:text-[var(--destructive-hover)]",
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

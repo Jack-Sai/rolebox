@@ -102,7 +102,7 @@ function PersonasPanel() {
       <header className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="font-medium">我的分身</h2>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">
             切换分身会让已有会话的上下文缓存失效。
           </p>
         </div>
@@ -112,23 +112,23 @@ function PersonasPanel() {
         </Button>
       </header>
 
-      {loading && <p className="text-sm text-gray-500">加载中…</p>}
-      {error && <p className="text-sm text-red-600">加载失败：{error}</p>}
+      {loading && <p className="text-sm text-[var(--text-muted)]">加载中…</p>}
+      {error && <p className="text-sm text-[var(--destructive)]">加载失败：{error}</p>}
       {!loading && !error && personas.length === 0 && !formOpen && (
-        <p className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+        <p           className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--text-muted)]">
           还没有分身
         </p>
       )}
 
       <ul className="space-y-2">
         {personas.map((persona) => (
-          <li
-            key={persona.id}
-            className="flex items-start justify-between gap-3 rounded-lg border border-gray-100 p-3"
-          >
+            <li
+              key={persona.id}
+              className="flex items-start justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+            >
             <div className="min-w-0">
               <p className="text-sm font-medium">{persona.name}</p>
-              <p className="mt-1 whitespace-pre-wrap text-xs text-gray-500">
+              <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
                 {persona.persona}
               </p>
             </div>
@@ -152,7 +152,7 @@ function PersonasPanel() {
       {formOpen && (
         <form
           onSubmit={(event) => void handleSubmit(event)}
-          className="mt-4 space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-4"
+          className="mt-4 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4"
         >
           <label className="block text-sm">
             <span className="mb-1 block font-medium">分身名</span>
@@ -230,7 +230,7 @@ function ServerPanel() {
     <div className="space-y-4">
       <header>
         <h2 className="font-medium">llama-server</h2>
-        <p className="mt-0.5 text-xs text-gray-500">
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
           采样参数由 server 启动参数决定，这里只配置地址。
         </p>
       </header>
@@ -249,7 +249,7 @@ function ServerPanel() {
           {testing ? "测试中…" : "测试连接"}
         </Button>
       </div>
-      {result && <p className="text-sm text-gray-600">{result}</p>}
+      {result && <p className="text-sm text-[var(--text-muted)]">{result}</p>}
     </div>
   );
 }
@@ -271,7 +271,7 @@ function AppearancePanel() {
     <div className="space-y-5">
       <header>
         <h2 className="font-medium">{t.settings.tabs.appearance}</h2>
-        <p className="mt-0.5 text-xs text-gray-500">
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
           {t.settings.appearance.hint}
         </p>
       </header>
@@ -290,8 +290,8 @@ function AppearancePanel() {
               className={cn(
                 "rounded-lg border px-3 py-2 text-sm",
                 theme === item.value
-                  ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                  ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                  :                 "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]",
               )}
             >
               {themeLabel[item.value]}
@@ -314,8 +314,8 @@ function AppearancePanel() {
               className={cn(
                 "rounded-lg border px-3 py-2 text-sm",
                 language === value
-                  ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                  ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                  :                 "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]",
               )}
             >
               {value === "zh" ? "中文" : "English"}
@@ -378,7 +378,7 @@ function DataPanel() {
     <div className="space-y-4">
       <header>
         <h2 className="font-medium">数据</h2>
-        <p className="mt-0.5 text-xs text-gray-500">
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
           备份包含角色、分身、会话、消息、群聊与设置；导入是覆盖式的。
         </p>
       </header>
@@ -412,8 +412,8 @@ export function SettingsPage() {
               className={cn(
                 "rounded-lg px-3 py-2 text-left text-sm",
                 tab === key
-                  ? "bg-indigo-50 font-medium text-indigo-700"
-                  : "text-gray-600 hover:bg-gray-100",
+                  ? "bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
+                  :                 "text-[var(--text-muted)] hover:bg-[var(--surface-muted)]",
               )}
             >
               {t.settings.tabs[key]}
@@ -421,7 +421,7 @@ export function SettingsPage() {
           ))}
         </nav>
 
-        <section className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white p-5">
+        <section className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
           {tab === "personas" && <PersonasPanel />}
           {tab === "server" && <ServerPanel />}
           {tab === "appearance" && <AppearancePanel />}

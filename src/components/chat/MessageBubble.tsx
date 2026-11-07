@@ -34,7 +34,10 @@ export const MessageBubble = memo(function MessageBubble({
   const isUser = message.role === "user";
   // 临时消息（id < 0）还在流式写入，不能编辑或删除。
   const editable =
-    message.id > 0 && (message.role === "user" || message.role === "assistant");
+    message.id > 0 &&
+    (message.role === "user" ||
+      message.role === "assistant" ||
+      message.role === "narration");
 
   const startEdit = () => {
     setDraft(message.content);
@@ -68,10 +71,10 @@ export const MessageBubble = memo(function MessageBubble({
           className={cn(
             "max-w-full whitespace-pre-wrap rounded-xl px-4 py-2 text-sm",
             isUser
-              ? "bg-indigo-600 text-white"
-              : "border border-gray-200 bg-white text-gray-800",
-            message.role === "narration" && "italic text-gray-500",
-            message.role === "summary" && "bg-amber-50 text-amber-800",
+              ? "bg-[var(--accent)] text-white"
+              : "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]",
+            message.role === "narration" && "italic text-[var(--text-muted)]",
+            message.role === "summary" && "bg-[var(--muted-bg)] text-[var(--text-muted)]",
           )}
         >
           {editing ? (
@@ -81,22 +84,22 @@ export const MessageBubble = memo(function MessageBubble({
                 rows={3}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                className="w-full resize-none rounded-lg border border-indigo-200 p-2 text-sm text-gray-800"
+                className="w-full resize-none rounded-lg border border-[var(--border)] p-2 text-sm text-[var(--text)]"
               />
               <div className="flex justify-end gap-2 text-xs">
                 <button
                   type="button"
-                  className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100"
-                  onClick={() => setEditing(false)}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-indigo-600 px-2 py-1 text-white"
-                  onClick={confirmEdit}
-                >
-                  保存
+                className="rounded px-2 py-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
+                onClick={() => setEditing(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="rounded bg-[var(--accent)] px-2 py-1 text-white"
+                onClick={confirmEdit}
+              >
+                保存
                 </button>
               </div>
             </div>
@@ -117,7 +120,7 @@ export const MessageBubble = memo(function MessageBubble({
         {message.deprecated && (
           <span
             data-testid="deprecated-mark"
-            className="text-xs text-amber-600"
+            className="text-xs text-[var(--text-muted)]"
           >
             上下文已变
           </span>
@@ -129,7 +132,7 @@ export const MessageBubble = memo(function MessageBubble({
           <button
             type="button"
             aria-label="编辑"
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded p-1 text-[var(--icon-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
             onClick={startEdit}
           >
             <Pencil size={14} />
@@ -139,7 +142,7 @@ export const MessageBubble = memo(function MessageBubble({
           <button
             type="button"
             aria-label="重新生成"
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded p-1 text-[var(--icon-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
             onClick={() => onRegenerate?.(message.id)}
           >
             <RefreshCw size={14} />
@@ -149,7 +152,7 @@ export const MessageBubble = memo(function MessageBubble({
           <button
             type="button"
             aria-label="删除"
-            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+            className="rounded p-1 text-[var(--icon-muted)] hover:bg-[var(--destructive-bg)] hover:text-[var(--destructive)]"
             onClick={() => onDelete?.(message.id)}
           >
             <Trash2 size={14} />
@@ -158,7 +161,7 @@ export const MessageBubble = memo(function MessageBubble({
         <button
           type="button"
           aria-label="复制"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded p-1 text-[var(--icon-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
           onClick={copy}
         >
           <Copy size={14} />
