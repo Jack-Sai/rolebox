@@ -9,6 +9,7 @@ import type {
   GroupMessage,
   GroupSession,
   GroupSessionInput,
+  ImportStats,
   Message,
   Session,
   SessionInput,
@@ -99,6 +100,13 @@ export const api = {
   setServerUrl: (url: string) => invoke<void>("set_server_url", { url }),
 
   testConnection: () => invoke<ConnectionInfo>("test_connection"),
+
+  exportBackup: (path: string) => invoke<void>("export_backup", { path }),
+
+  importBackup: (path: string) => invoke<ImportStats>("import_backup", { path }),
+
+  exportSessionText: (sessionId: number, format: string, path: string) =>
+    invoke<void>("export_session_text", { sessionId, format, path }),
 
   getGroupSessions: () => invoke<GroupSession[]>("get_group_sessions"),
 

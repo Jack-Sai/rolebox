@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { CheckCircle2, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { cn } from "../lib/utils";
@@ -327,12 +328,68 @@ function AppearancePanel() {
 }
 
 function DataPanel() {
+  const show = useToastStore((state) => state.show);
+  const [busy, setBusy] = useState(false);
+
+  const exportBackup = async () => {
+    const target = await save({
+      defaultPath: "rolebox-backup.zip",
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    });
+    if (!target) return;
+    setBusy(true);
+    try {
+      await api.exportBackup(target);
+      show("备份已导出");
+    } catch (cause) {
+      show(`导出失败：${String(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importBackup = async () => {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    });
+    if (typeof selected !== "string") return;
+    if (
+      !window.confirm(
+        "导入会覆盖当前全部数据（会先自动备份一份 .before.zip）。继续？",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const stats = await api.importBackup(selected);
+      show(
+        `已导入：角色 ${stats.characters}、会话 ${stats.sessions}、消息 ${stats.messages}`,
+      );
+    } catch (cause) {
+      show(`导入失败：${String(cause)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="space-y-2">
-      <h2 className="font-medium">数据</h2>
-      <p className="text-xs text-gray-500">
-        整体备份与会话文本导出在下一批接入（C45）。
-      </p>
+    <div className="space-y-4">
+      <header>
+        <h2 className="font-medium">数据</h2>
+        <p className="mt-0.5 text-xs text-gray-500">
+          备份包含角色、分身、会话、消息、群聊与设置；导入是覆盖式的。
+        </p>
+      </header>
+      <div className="flex gap-2">
+        <Button onClick={() => void exportBackup()} disabled={busy}>
+          导出备份
+        </Button>
+        <Button variant="ghost" onClick={() => void importBackup()} disabled={busy}>
+          导入备份
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import { SettingsPage } from "./SettingsPage";
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  save: vi.fn(),
+  open: vi.fn(),
+}));
+
+const mockedSave = vi.mocked(save) as unknown as ReturnType<typeof vi.fn>;
 
 // setup.ts 只 mock Tauri 底层模块，不 mock store（dev.md:310）。
 const mockedInvoke = vi.mocked(invoke) as unknown as ReturnType<typeof vi.fn>;
@@ -77,6 +85,26 @@ describe("SettingsPage llama-server 页签", () => {
     await waitFor(() => {
       expect(mockedInvoke).toHaveBeenCalledWith("set_server_url", {
         url: "http://localhost:9090/",
+      });
+    });
+  });
+});
+
+describe("SettingsPage 数据页签", () => {
+  it("选好路径后调用 export_backup", async () => {
+    mockedInvoke.mockImplementation(async (command: string) => {
+      if (command === "get_personas") return [];
+      return null;
+    });
+    mockedSave.mockResolvedValue("/tmp/rolebox-backup.zip");
+
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByText("数据"));
+    fireEvent.click(await screen.findByText("导出备份"));
+
+    await waitFor(() => {
+      expect(mockedInvoke).toHaveBeenCalledWith("export_backup", {
+        path: "/tmp/rolebox-backup.zip",
       });
     });
   });

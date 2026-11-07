@@ -104,6 +104,14 @@ export type StreamEvent =
   | { type: "error"; message: string }
   | { type: "cancelled" };
 
+export interface ImportStats {
+  characters: number;
+  userPersonas: number;
+  sessions: number;
+  messages: number;
+  groupSessions: number;
+}
+
 export interface AppConfig {
   server_url: string;
 }
