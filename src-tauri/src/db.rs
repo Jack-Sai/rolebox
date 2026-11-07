@@ -1,6 +1,6 @@
 use crate::models::{
-    Character, CharacterInput, GroupMember, GroupMessage, GroupSession, GroupSessionInput, Message,
-    Session, SessionInput, UserPersona, UserPersonaInput,
+    BackupData, BackupGroupMember, Character, CharacterInput, GroupMember, GroupMessage, GroupSession,
+    GroupSessionInput, Message, Session, SessionInput, UserPersona, UserPersonaInput,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow};
 use sqlx::{Row, SqlitePool};
@@ -784,6 +784,208 @@ pub async fn insert_group_message(
         .await
         .map_err(|e| format!("回填版本组失败：{e}"))?;
     Ok(id)
+}
+
+// ---------- 整体备份专用（C43） ----------
+
+pub async fn list_all_sessions(pool: &SqlitePool) -> Result<Vec<Session>, String> {
+    let rows = sqlx::query(&format!(
+        "SELECT {SESSION_COLUMNS} FROM sessions ORDER BY id"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询会话失败：{e}"))?;
+    rows.iter().map(session_from_row).collect()
+}
+
+pub async fn list_all_messages(pool: &SqlitePool) -> Result<Vec<Message>, String> {
+    let rows = sqlx::query(&format!(
+        "SELECT {MESSAGE_COLUMNS} FROM messages ORDER BY id"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询消息失败：{e}"))?;
+    rows.iter().map(message_from_row).collect()
+}
+
+pub async fn list_all_group_messages(pool: &SqlitePool) -> Result<Vec<GroupMessage>, String> {
+    let rows = sqlx::query(&format!(
+        "SELECT {GROUP_MESSAGE_COLUMNS} FROM group_messages ORDER BY id"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询群消息失败：{e}"))?;
+    rows.iter().map(group_message_from_row).collect()
+}
+
+pub async fn list_all_group_members(pool: &SqlitePool) -> Result<Vec<BackupGroupMember>, String> {
+    let rows = sqlx::query(
+        "SELECT group_id, character_id, sort_order FROM group_members \
+         ORDER BY group_id, sort_order, id",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询群成员失败：{e}"))?;
+
+    rows.iter()
+        .map(|row| {
+            Ok(BackupGroupMember {
+                group_id: row.try_get("group_id").map_err(|e| e.to_string())?,
+                character_id: row.try_get("character_id").map_err(|e| e.to_string())?,
+                sort_order: row.try_get("sort_order").map_err(|e| e.to_string())?,
+            })
+        })
+        .collect()
+}
+
+/// 覆盖式导入：一个事务里清空全部表再按原 id 插回，中途失败整体回滚。
+pub async fn replace_all_data(pool: &SqlitePool, data: &BackupData) -> Result<(), String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("开启事务失败：{e}"))?;
+
+    // 先删子表再删父表，否则外键会拦住。
+    for statement in [
+        "DELETE FROM group_messages",
+        "DELETE FROM group_members",
+        "DELETE FROM group_sessions",
+        "DELETE FROM messages",
+        "DELETE FROM sessions",
+        "DELETE FROM user_personas",
+        "DELETE FROM characters",
+        "DELETE FROM settings",
+    ] {
+        sqlx::query(statement)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("清空数据失败：{e}"))?;
+    }
+
+    for item in &data.characters {
+        sqlx::query("INSERT INTO characters (id, name, tagline, persona, avatar_color, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(item.id)
+            .bind(&item.name)
+            .bind(&item.tagline)
+            .bind(&item.persona)
+            .bind(&item.avatar_color)
+            .bind(&item.created_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入角色失败：{e}"))?;
+    }
+
+    for item in &data.user_personas {
+        sqlx::query("INSERT INTO user_personas (id, name, persona) VALUES (?, ?, ?)")
+            .bind(item.id)
+            .bind(&item.name)
+            .bind(&item.persona)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入分身失败：{e}"))?;
+    }
+
+    for item in &data.sessions {
+        sqlx::query("INSERT INTO sessions (id, character_id, title, scenario, user_persona_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind(item.id)
+            .bind(item.character_id)
+            .bind(&item.title)
+            .bind(&item.scenario)
+            .bind(item.user_persona_id)
+            .bind(&item.created_at)
+            .bind(&item.updated_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入会话失败：{e}"))?;
+    }
+
+    for item in &data.messages {
+        sqlx::query("INSERT INTO messages (id, session_id, role, content, version_group, is_active, deprecated, summarized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(item.id)
+            .bind(item.session_id)
+            .bind(&item.role)
+            .bind(&item.content)
+            .bind(item.version_group)
+            .bind(item.is_active as i64)
+            .bind(item.deprecated as i64)
+            .bind(item.summarized as i64)
+            .bind(&item.created_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入消息失败：{e}"))?;
+    }
+
+    for item in &data.group_sessions {
+        sqlx::query("INSERT INTO group_sessions (id, title, scenario, user_persona_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(item.id)
+            .bind(&item.title)
+            .bind(&item.scenario)
+            .bind(item.user_persona_id)
+            .bind(&item.created_at)
+            .bind(&item.updated_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入群聊失败：{e}"))?;
+    }
+
+    for item in &data.group_members {
+        sqlx::query(
+            "INSERT INTO group_members (group_id, character_id, sort_order) VALUES (?, ?, ?)",
+        )
+        .bind(item.group_id)
+        .bind(item.character_id)
+        .bind(item.sort_order)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("写入群成员失败：{e}"))?;
+    }
+
+    for item in &data.group_messages {
+        sqlx::query("INSERT INTO group_messages (id, group_id, character_id, role, content, version_group, is_active, deprecated, summarized, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(item.id)
+            .bind(item.group_id)
+            .bind(item.character_id)
+            .bind(&item.role)
+            .bind(&item.content)
+            .bind(item.version_group)
+            .bind(item.is_active as i64)
+            .bind(item.deprecated as i64)
+            .bind(item.summarized as i64)
+            .bind(&item.created_at)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入群消息失败：{e}"))?;
+    }
+
+    for (key, value) in &data.settings {
+        sqlx::query("INSERT INTO settings (key, value) VALUES (?, ?)")
+            .bind(key)
+            .bind(value)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入设置失败：{e}"))?;
+    }
+
+    tx.commit()
+        .await
+        .map_err(|e| format!("提交事务失败：{e}"))?;
+    Ok(())
+}
+
+pub async fn all_settings(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let rows = sqlx::query("SELECT key, value FROM settings ORDER BY key")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询设置失败：{e}"))?;
+    let mut settings = std::collections::HashMap::new();
+    for row in &rows {
+        let key: String = row.try_get("key").map_err(|e| e.to_string())?;
+        let value: String = row.try_get("value").map_err(|e| e.to_string())?;
+        settings.insert(key, value);
+    }
+    Ok(settings)
 }
 
 pub async fn set_setting(pool: &SqlitePool, key: &str, value: &str) -> Result<(), String> {

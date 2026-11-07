@@ -135,6 +135,31 @@ pub enum StreamEvent {
     Cancelled,
 }
 
+/// 备份里的群成员只保留 DB 真实列：GroupMember 的 name / avatar_color 是 JOIN 出来的。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct BackupGroupMember {
+    pub group_id: i64,
+    pub character_id: i64,
+    pub sort_order: i64,
+}
+
+/// 整体备份的 data.json（DESIGN 5.8）。各表都带 id，导入时按原 id 插回以保住外键。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct BackupData {
+    pub version: u32,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub exported_at: String,
+    pub characters: Vec<Character>,
+    pub user_personas: Vec<UserPersona>,
+    pub sessions: Vec<Session>,
+    pub messages: Vec<Message>,
+    pub group_sessions: Vec<GroupSession>,
+    pub group_members: Vec<BackupGroupMember>,
+    pub group_messages: Vec<GroupMessage>,
+    pub settings: std::collections::HashMap<String, String>,
+}
+
 /// 连接测试结果（前端 types.ts 用 camelCase）。
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]

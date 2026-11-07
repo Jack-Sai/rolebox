@@ -83,6 +83,10 @@
   通过 JOIN `characters` 取，不冗余存储；`group_messages` 同样按 `version_group, id` 排序。
 - `export.rs`：单角色 JSON 的编解码纯函数 + 文件读写；`encode_character` /
   `decode_character` 不碰文件系统，便于验证格式与一致性。
+  **整体备份**（C43）：`collect_backup` 读全部表组装 `BackupData`，`encode_backup` 打包成
+  `zip(data.json + README.txt)`；导入是覆盖模式，`replace_all_data` 在**一个事务**里按
+  `子表 → 父表` 清空再按原 id 插回（保住外键），导入前自动写 `<path>.before.zip` 备份当前数据，
+  自动备份失败就取消导入。`BackupGroupMember` 只存 DB 真实列，`GroupMember` 的展示字段是 JOIN 出来的。
 - 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。
 
 ## 5. Tauri 命令语义
