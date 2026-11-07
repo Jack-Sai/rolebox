@@ -58,6 +58,11 @@ export const api = {
   cancelGeneration: (sessionId: number) =>
     invoke<void>("cancel_generation", { sessionId }),
 
+  updateMessage: (id: number, content: string) =>
+    invoke<void>("update_message", { id, content }),
+
+  deleteMessage: (id: number) => invoke<void>("delete_message", { id }),
+
   generateReply: async (
     sessionId: number,
     onChunk: (event: StreamEvent) => void,

@@ -1,7 +1,13 @@
 import { defaultRenderContent, MessageBubble } from "./MessageBubble";
 import type { Message } from "../../types";
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export interface MessageListProps {
+  messages: Message[];
+  onEdit?: (id: number, content: string) => void;
+  onDelete?: (id: number) => void;
+}
+
+export function MessageList({ messages, onEdit, onDelete }: MessageListProps) {
   return (
     <div className="space-y-3" data-testid="message-list">
       {messages.map((message) => {
@@ -17,6 +23,8 @@ export function MessageList({ messages }: { messages: Message[] }) {
                 key={message.id}
                 message={message}
                 renderContent={defaultRenderContent}
+                onEdit={onEdit}
+                onDelete={onDelete}
               />
             );
           default:

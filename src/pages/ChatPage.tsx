@@ -79,6 +79,31 @@ export function ChatPage() {
       .catch((cause) => show(`停止失败：${String(cause)}`));
   }, [sessionId, show]);
 
+  const onEditMessage = useCallback(
+    (id: number, content: string) => {
+      void api
+        .updateMessage(id, content)
+        .then(() => load())
+        .catch((cause) => show(`编辑失败：${String(cause)}`));
+    },
+    [load, show],
+  );
+
+  const onDeleteMessage = useCallback(
+    (id: number) => {
+      if (
+        !window.confirm("确定删除这条消息？之后的消息会标记为「上下文已变」。")
+      ) {
+        return;
+      }
+      void api
+        .deleteMessage(id)
+        .then(() => load())
+        .catch((cause) => show(`删除失败：${String(cause)}`));
+    },
+    [load, show],
+  );
+
   const handleGenerate = async () => {
     setStreaming(true);
     setMessages((previous) => [...previous, tempMessage(sessionId)]);
@@ -158,7 +183,11 @@ export function ChatPage() {
             还没有消息。发一句话，再点「生成回复」。
           </p>
         )}
-        <MessageList messages={messages} />
+        <MessageList
+          messages={messages}
+          onEdit={onEditMessage}
+          onDelete={onDeleteMessage}
+        />
       </main>
 
       <footer className="shrink-0 border-t border-gray-200 bg-white p-4">

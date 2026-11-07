@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MessageBubble } from "./MessageBubble";
 import type { Message } from "../../types";
 
@@ -35,5 +35,41 @@ describe("MessageBubble memo", () => {
       />,
     );
     expect(renderContent).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("MessageBubble 消息操作", () => {
+  it("编辑后把新内容交给 onEdit", () => {
+    const onEdit = vi.fn();
+    render(<MessageBubble message={message} onEdit={onEdit} />);
+
+    fireEvent.click(screen.getByLabelText("编辑"));
+    const input = screen.getByLabelText("编辑消息") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "改过的内容" } });
+    fireEvent.click(screen.getByText("保存"));
+
+    expect(onEdit).toHaveBeenCalledWith(1, "改过的内容");
+  });
+
+  it("删除按钮把消息 id 交给 onDelete", () => {
+    const onDelete = vi.fn();
+    render(<MessageBubble message={message} onDelete={onDelete} />);
+
+    fireEvent.click(screen.getByLabelText("删除"));
+
+    expect(onDelete).toHaveBeenCalledWith(1);
+  });
+
+  it("复制按钮把内容写入剪贴板", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    render(<MessageBubble message={message} />);
+
+    fireEvent.click(screen.getByLabelText("复制"));
+
+    expect(writeText).toHaveBeenCalledWith("你好");
   });
 });

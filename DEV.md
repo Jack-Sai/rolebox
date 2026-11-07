@@ -166,6 +166,8 @@
   （坑 #12 / #13）；`MessageList` 的 `switch (message.role)` 保留 default 兜底（坑 #4）；
   `InputArea` 基础输入框，流式停止与旁白模式留到 C15 / C24。
 - 追加消息用 `[...previous, message]`，不重建历史对象，否则 memo 恒失效。
+- 消息操作（C18）：`MessageBubble` 内部管编辑态，改名/删除通过 `onEdit` / `onDelete` 稳定回调上抛，
+  确认弹窗与重新加载留在 `ChatPage`；临时消息（id < 0）不显示编辑/删除；复制走 `navigator.clipboard`。
 - `lib/stream.ts`：`createStreamHandler` 分发六种 StreamEvent（default 用 `never` 做穷尽检查）；
   `mergeText` 只在末尾是文本块时合并，`flushBuffer` 在插入非文本块前排空缓冲（坑 #5）。
   ChatPage 用 `id = -1` 的临时消息逐字追加，`Done` 换成真实 id；`Cancelled` 保留已生成内容，
