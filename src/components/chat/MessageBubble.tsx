@@ -1,6 +1,7 @@
 import { memo, useState, type ReactNode } from "react";
-import { Copy, Pencil, Trash2 } from "lucide-react";
+import { Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { VersionSwitcher } from "./VersionSwitcher";
 import type { Message } from "../../types";
 
 // 模块级函数：引用稳定。写在组件体内会让 React.memo 的浅比较恒不相等（坑 #12）。
@@ -13,6 +14,9 @@ export interface MessageBubbleProps {
   renderContent?: (content: string) => ReactNode;
   onEdit?: (id: number, content: string) => void;
   onDelete?: (id: number) => void;
+  versions?: Message[];
+  onActivateVersion?: (messageId: number) => void;
+  onRegenerate?: (messageId: number) => void;
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -20,6 +24,9 @@ export const MessageBubble = memo(function MessageBubble({
   renderContent = defaultRenderContent,
   onEdit,
   onDelete,
+  versions,
+  onActivateVersion,
+  onRegenerate,
 }: MessageBubbleProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
@@ -98,6 +105,14 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         </div>
 
+        {versions && onActivateVersion && (
+          <VersionSwitcher
+            versions={versions}
+            currentId={message.id}
+            onActivate={onActivateVersion}
+          />
+        )}
+
         {/* deprecated 只是提示：这些消息生成时上下文已变，但下次请求仍会带上它们。 */}
         {message.deprecated && (
           <span
@@ -118,6 +133,16 @@ export const MessageBubble = memo(function MessageBubble({
             onClick={startEdit}
           >
             <Pencil size={14} />
+          </button>
+        )}
+        {message.role === "assistant" && message.id > 0 && !editing && (
+          <button
+            type="button"
+            aria-label="重新生成"
+            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            onClick={() => onRegenerate?.(message.id)}
+          >
+            <RefreshCw size={14} />
           </button>
         )}
         {editable && !editing && (

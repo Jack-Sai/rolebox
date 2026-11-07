@@ -175,6 +175,11 @@
   （坑 #12 / #13）；`MessageList` 的 `switch (message.role)` 保留 default 兜底（坑 #4）；
   `InputArea` 基础输入框，流式停止与旁白模式留到 C15 / C24。
 - 追加消息用 `[...previous, message]`，不重建历史对象，否则 memo 恒失效。
+- 版本切换（C22）：`VersionSwitcher` 显示 `← 2/3 →`，只有一个版本时不渲染；
+  `ChatPage` 只对激活的 assistant 消息查询所属组，切换前若有后续消息先确认。
+  重新生成入口在气泡操作区，完成后重新加载（当前不逐字显示）。
+  **注意**：`list_messages` 必须 `ORDER BY version_group, id`——重生成的新版本 id 更大，
+  按 id 排会甩到会话末尾，既排错位置也会让上下文顺序错乱。
 - 消息操作（C18）：`MessageBubble` 内部管编辑态，改名/删除通过 `onEdit` / `onDelete` 稳定回调上抛，
   确认弹窗与重新加载留在 `ChatPage`；临时消息（id < 0）不显示编辑/删除；复制走 `navigator.clipboard`。
 - `lib/stream.ts`：`createStreamHandler` 分发六种 StreamEvent（default 用 `never` 做穷尽检查）；

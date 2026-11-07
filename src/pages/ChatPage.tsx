@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
@@ -36,6 +36,27 @@ export function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [versionsByGroup, setVersionsByGroup] = useState<
+    Record<number, Message[]>
+  >({});
+
+  // 版本信息是增强功能：每条激活的 assistant 消息查一次自己所在的组，失败就静默跳过。
+  const loadVersions = useCallback(async (list: Message[]) => {
+    const targets = list.filter(
+      (item) => item.role === "assistant" && item.id > 0,
+    );
+    try {
+      const entries = await Promise.all(
+        targets.map(
+          async (item) =>
+            [item.version_group, await api.getMessageVersions(item.id)] as const,
+        ),
+      );
+      setVersionsByGroup(Object.fromEntries(entries));
+    } catch {
+      setVersionsByGroup({});
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -50,10 +71,11 @@ export function ChatPage() {
         characters.find((item) => item.id === current.character_id) ?? null,
       );
       setError(null);
+      void loadVersions(list);
     } catch (cause) {
       setError(String(cause));
     }
-  }, [sessionId, setMessages]);
+  }, [sessionId, loadVersions]);
 
   useEffect(() => {
     void load();
@@ -100,6 +122,50 @@ export function ChatPage() {
         .deleteMessage(id)
         .then(() => load())
         .catch((cause) => show(`删除失败：${String(cause)}`));
+    },
+    [load, show],
+  );
+
+  // 用 ref 读最新列表，避免 onActivateVersion 依赖 messages 导致回调每次渲染都变（坑 #13）。
+  const messagesRef = useRef<Message[]>([]);
+  messagesRef.current = messages;
+
+  const onActivateVersion = useCallback(
+    (messageId: number) => {
+      const hasLater = messagesRef.current.some((item) => item.id > messageId);
+      if (
+        hasLater &&
+        !window.confirm("切换版本后，后续消息的上下文已变，确定切换？")
+      ) {
+        return;
+      }
+      void api
+        .activateMessageVersion(messageId)
+        .then(() => load())
+        .catch((cause) => show(`切换版本失败：${String(cause)}`));
+    },
+    [load, show],
+  );
+
+  const onRegenerate = useCallback(
+    (messageId: number) => {
+      setStreaming(true);
+      let cancelled = false;
+      const handler = createStreamHandler({
+        onAppend: () => {},
+        onDone: () => {},
+        onError: (message) => show(`重新生成失败：${message}`),
+        onCancelled: () => {
+          cancelled = true;
+        },
+      });
+      void api
+        .regenerateMessage(messageId, handler)
+        .then(() => load())
+        .catch((cause) => {
+          if (!cancelled) show(`重新生成失败：${String(cause)}`);
+        })
+        .finally(() => setStreaming(false));
     },
     [load, show],
   );
@@ -187,6 +253,9 @@ export function ChatPage() {
           messages={messages}
           onEdit={onEditMessage}
           onDelete={onDeleteMessage}
+          versionsByGroup={versionsByGroup}
+          onActivateVersion={onActivateVersion}
+          onRegenerate={onRegenerate}
         />
       </main>
 

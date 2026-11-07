@@ -63,6 +63,21 @@ export const api = {
 
   deleteMessage: (id: number) => invoke<void>("delete_message", { id }),
 
+  getMessageVersions: (messageId: number) =>
+    invoke<Message[]>("get_message_versions", { messageId }),
+
+  activateMessageVersion: (messageId: number) =>
+    invoke<void>("activate_message_version", { messageId }),
+
+  regenerateMessage: async (
+    messageId: number,
+    onChunk: (event: StreamEvent) => void,
+  ): Promise<Message> => {
+    const channel = new Channel<StreamEvent>();
+    channel.onmessage = onChunk;
+    return invoke<Message>("regenerate_message", { messageId, onChunk: channel });
+  },
+
   generateReply: async (
     sessionId: number,
     onChunk: (event: StreamEvent) => void,

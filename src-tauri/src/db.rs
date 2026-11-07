@@ -385,7 +385,11 @@ pub async fn list_messages(
     session_id: i64,
 ) -> Result<Vec<Message>, String> {
     let rows = sqlx::query(&format!(
-        "SELECT {MESSAGE_COLUMNS} FROM messages WHERE session_id = ? AND is_active = 1 ORDER BY id"
+        // 按 version_group 排序：重生成的新版本 id 更大，但 group 沿用旧值，
+        // 这样才能留在原位置；若按 id 排会把它甩到会话末尾，上下文顺序就错了。
+        // 按 version_group 排序：重生成的新版本 id 更大，但 group 沿用旧值，
+        // 这样才能留在原位置；若按 id 排会把它甩到会话末尾，上下文顺序就错了。
+        "SELECT {MESSAGE_COLUMNS} FROM messages WHERE session_id = ? AND is_active = 1 ORDER BY version_group, id"
     ))
     .bind(session_id)
     .fetch_all(pool)
@@ -1133,5 +1137,37 @@ mod tests {
             .iter()
             .all(|item| !item.is_active));
         assert!(get_message(&pool, group_b).await.unwrap().is_active);
+    }
+
+    #[tokio::test]
+    async fn list_messages_keeps_regenerated_version_in_original_position() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let user = insert_message(&pool, session_id, "user", "问")
+            .await
+            .unwrap();
+        let first = insert_message(&pool, session_id, "assistant", "答一")
+            .await
+            .unwrap();
+        // 关键：新版本之后还有别的消息，按 id 排会把新版本甩到最后。
+        let later = insert_message(&pool, session_id, "user", "后续")
+            .await
+            .unwrap();
+
+        // 模拟重新生成：旧版本下线，新版本 id 更大但沿用同一 group。
+        deactivate_group(&pool, first).await.unwrap();
+        let new_id = insert_message_version(&pool, session_id, "assistant", "答二", first)
+            .await
+            .unwrap();
+
+        let list = list_messages(&pool, session_id).await.unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].id, user);
+        assert_eq!(
+            list[1].id, new_id,
+            "重生成的新版本应留在原位置，而不是排到会话末尾"
+        );
+        assert_eq!(list[1].version_group, first);
+        assert_eq!(list[2].id, later);
     }
 }

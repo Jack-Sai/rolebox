@@ -5,9 +5,19 @@ export interface MessageListProps {
   messages: Message[];
   onEdit?: (id: number, content: string) => void;
   onDelete?: (id: number) => void;
+  versionsByGroup?: Record<number, Message[]>;
+  onActivateVersion?: (messageId: number) => void;
+  onRegenerate?: (messageId: number) => void;
 }
 
-export function MessageList({ messages, onEdit, onDelete }: MessageListProps) {
+export function MessageList({
+  messages,
+  onEdit,
+  onDelete,
+  versionsByGroup,
+  onActivateVersion,
+  onRegenerate,
+}: MessageListProps) {
   return (
     <div className="space-y-3" data-testid="message-list">
       {messages.map((message) => {
@@ -25,6 +35,9 @@ export function MessageList({ messages, onEdit, onDelete }: MessageListProps) {
                 renderContent={defaultRenderContent}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                versions={versionsByGroup?.[message.version_group]}
+                onActivateVersion={onActivateVersion}
+                onRegenerate={onRegenerate}
               />
             );
           default:
