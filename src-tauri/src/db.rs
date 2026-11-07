@@ -427,6 +427,41 @@ pub async fn insert_message(
     Ok(id)
 }
 
+pub async fn update_message(pool: &SqlitePool, id: i64, content: &str) -> Result<(), String> {
+    sqlx::query("UPDATE messages SET content = ? WHERE id = ?")
+        .bind(content)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新消息失败：{e}"))?;
+    Ok(())
+}
+
+pub async fn delete_message(pool: &SqlitePool, id: i64) -> Result<(), String> {
+    sqlx::query("DELETE FROM messages WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除消息失败：{e}"))?;
+    Ok(())
+}
+
+/// 编辑或删除某条消息后，它之后的同会话消息都标记「上下文已变」。
+/// 只影响 UI 提示，**不过滤上下文**（DESIGN 4.2）：消息仍然进入下一次请求。
+pub async fn mark_deprecated_after(
+    pool: &SqlitePool,
+    session_id: i64,
+    after_id: i64,
+) -> Result<(), String> {
+    sqlx::query("UPDATE messages SET deprecated = 1 WHERE session_id = ? AND id > ?")
+        .bind(session_id)
+        .bind(after_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("标记过期失败：{e}"))?;
+    Ok(())
+}
+
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
     sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
         .bind(key)
@@ -812,5 +847,86 @@ mod tests {
         assert_eq!(get_message(&pool, second).await.unwrap().content, "乙");
         assert_eq!(get_message(&pool, first).await.unwrap().content, "甲");
         assert!(get_message(&pool, 99999).await.is_err());
+    }
+
+    async fn session_with_character(pool: &SqlitePool, name: &str) -> i64 {
+        let character = create_character(pool, &character_input(name)).await.unwrap();
+        create_session(pool, &session_input(character.id, "会话"))
+            .await
+            .unwrap()
+            .id
+    }
+
+    #[tokio::test]
+    async fn update_message_changes_content_only() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let id = insert_message(&pool, session_id, "assistant", "旧内容")
+            .await
+            .unwrap();
+
+        update_message(&pool, id, "新内容").await.unwrap();
+
+        let message = get_message(&pool, id).await.unwrap();
+        assert_eq!(message.content, "新内容");
+        assert_eq!(message.role, "assistant");
+        assert_eq!(message.version_group, id);
+        assert!(!message.deprecated);
+    }
+
+    #[tokio::test]
+    async fn delete_message_removes_only_that_row() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "user", "甲")
+            .await
+            .unwrap();
+        insert_message(&pool, session_id, "assistant", "乙")
+            .await
+            .unwrap();
+
+        delete_message(&pool, first).await.unwrap();
+
+        let list = list_messages(&pool, session_id).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].content, "乙");
+    }
+
+    #[tokio::test]
+    async fn mark_deprecated_after_flags_later_messages_in_same_session() {
+        let pool = seeded_pool().await;
+        let session_a = session_with_character(&pool, "甲").await;
+        let session_b = session_with_character(&pool, "乙").await;
+        let first = insert_message(&pool, session_a, "user", "一").await.unwrap();
+        let second = insert_message(&pool, session_a, "assistant", "二").await.unwrap();
+        let third = insert_message(&pool, session_a, "user", "三").await.unwrap();
+        let other = insert_message(&pool, session_b, "user", "别的会话")
+            .await
+            .unwrap();
+
+        mark_deprecated_after(&pool, session_a, first).await.unwrap();
+
+        assert!(!get_message(&pool, first).await.unwrap().deprecated);
+        assert!(get_message(&pool, second).await.unwrap().deprecated);
+        assert!(get_message(&pool, third).await.unwrap().deprecated);
+        assert!(!get_message(&pool, other).await.unwrap().deprecated);
+    }
+
+    #[tokio::test]
+    async fn deprecated_messages_still_appear_in_context_messages() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "user", "一").await.unwrap();
+        insert_message(&pool, session_id, "assistant", "二")
+            .await
+            .unwrap();
+
+        mark_deprecated_after(&pool, session_id, first).await.unwrap();
+
+        // deprecated 只是 UI 提示：list_messages 不能因此丢消息（DESIGN 4.2）。
+        let list = list_messages(&pool, session_id).await.unwrap();
+        assert_eq!(list.len(), 2);
+        assert!(list[1].deprecated);
+        assert_eq!(list[1].content, "二");
     }
 }
