@@ -5,6 +5,7 @@ import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { truncate } from "../lib/utils";
 import { Button } from "../components/ui/button";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToastStore } from "../store/toast";
 import type { Character } from "../types";
 
@@ -13,6 +14,8 @@ export function CharacterListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const show = useToastStore((state) => state.show);
+  // 角色删除走应用内二次确认，取消不删除。
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,18 +61,19 @@ export function CharacterListPage() {
     }
   };
 
-  const handleDelete = async (character: Character) => {
-    if (
-      !window.confirm(
-        `确定删除角色「${character.name}」？相关会话也会一并删除。`,
-      )
-    ) {
-      return;
-    }
+  const handleDelete = (character: Character) => {
+    setPendingDeleteId(character.id);
+  };
+
+  const confirmDeleteCharacter = async () => {
+    const id = pendingDeleteId;
+    if (id === null) return;
+    const character = characters.find((c) => c.id === id);
+    setPendingDeleteId(null);
     try {
-      await api.deleteCharacter(character.id);
+      await api.deleteCharacter(id);
       await load();
-      show("角色已删除");
+      show(character ? `角色「${character.name}」已删除` : "角色已删除");
     } catch (cause) {
       show(`删除失败：${String(cause)}`);
     }
@@ -152,6 +156,16 @@ export function CharacterListPage() {
           </article>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除这个角色？"
+        description="相关会话也会一并删除。"
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDeleteCharacter}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

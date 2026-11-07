@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { Button } from "../components/ui/button";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToastStore } from "../store/toast";
 import type { GroupSession } from "../types";
 
@@ -11,6 +12,8 @@ export function GroupListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const show = useToastStore((state) => state.show);
+  // 群聊删除走应用内二次确认，取消不删除。
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -28,14 +31,19 @@ export function GroupListPage() {
     void load();
   }, [load]);
 
-  const handleDelete = async (group: GroupSession) => {
-    if (!window.confirm(`确定删除群聊「${group.title}」？消息与成员都会删除。`)) {
-      return;
-    }
+  const handleDelete = (group: GroupSession) => {
+    setPendingDeleteId(group.id);
+  };
+
+  const confirmDeleteGroup = async () => {
+    const id = pendingDeleteId;
+    if (id === null) return;
+    const group = groups.find((g) => g.id === id);
+    setPendingDeleteId(null);
     try {
-      await api.deleteGroupSession(group.id);
+      await api.deleteGroupSession(id);
       await load();
-      show("群聊已删除");
+      show(group ? `群聊「${group.title}」已删除` : "群聊已删除");
     } catch (cause) {
       show(`删除失败：${String(cause)}`);
     }
@@ -83,6 +91,16 @@ export function GroupListPage() {
           </li>
         ))}
       </ul>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除这个群聊？"
+        description="消息与成员都会删除。"
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDeleteGroup}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

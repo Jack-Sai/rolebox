@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { Button } from "../components/ui/button";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToastStore } from "../store/toast";
 import type { Character, Session } from "../types";
 
@@ -13,6 +14,8 @@ export function SessionListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const show = useToastStore((state) => state.show);
+  // 会话删除走应用内二次确认，取消不删除。
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     void api
@@ -40,14 +43,19 @@ export function SessionListPage() {
     void loadSessions(characterId);
   }, [characterId, loadSessions]);
 
-  const handleDelete = async (session: Session) => {
-    if (!window.confirm(`确定删除会话「${session.title}」？消息也会一并删除。`)) {
-      return;
-    }
+  const handleDelete = (session: Session) => {
+    setPendingDeleteId(session.id);
+  };
+
+  const confirmDeleteSession = async () => {
+    const id = pendingDeleteId;
+    if (id === null) return;
+    const session = sessions.find((s) => s.id === id);
+    setPendingDeleteId(null);
     try {
-      await api.deleteSession(session.id);
+      await api.deleteSession(id);
       await loadSessions(characterId);
-      show("会话已删除");
+      show(session ? `会话「${session.title}」已删除` : "会话已删除");
     } catch (cause) {
       show(`删除失败：${String(cause)}`);
     }
@@ -120,6 +128,16 @@ export function SessionListPage() {
           </li>
         ))}
       </ul>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除这个会话？"
+        description="消息也会一并删除。"
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDeleteSession}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

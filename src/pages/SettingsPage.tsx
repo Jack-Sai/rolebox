@@ -6,6 +6,7 @@ import { cn } from "../lib/utils";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useI18n } from "../i18n";
 import {
   useSettingsStore,
@@ -38,6 +39,8 @@ function PersonasPanel() {
   const [form, setForm] = useState<UserPersonaInput>(emptyForm);
   const [formOpen, setFormOpen] = useState(false);
   const show = useToastStore((state) => state.show);
+  // 分身删除走应用内二次确认，取消不删除。
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -86,12 +89,19 @@ function PersonasPanel() {
     }
   };
 
-  const handleDelete = async (persona: UserPersona) => {
-    if (!window.confirm(`确定删除分身「${persona.name}」？`)) return;
+  const handleDelete = (persona: UserPersona) => {
+    setPendingDeleteId(persona.id);
+  };
+
+  const confirmDeletePersona = async () => {
+    const id = pendingDeleteId;
+    if (id === null) return;
+    const persona = personas.find((p) => p.id === id);
+    setPendingDeleteId(null);
     try {
-      await api.deletePersona(persona.id);
+      await api.deletePersona(id);
       await load();
-      show("分身已删除");
+      show(persona ? `分身「${persona.name}」已删除` : "分身已删除");
     } catch (cause) {
       show(`删除失败：${String(cause)}`);
     }
@@ -185,6 +195,16 @@ function PersonasPanel() {
           </div>
         </form>
       )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除这个分身？"
+        description="确定后无法恢复。"
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDeletePersona}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </>
   );
 }
