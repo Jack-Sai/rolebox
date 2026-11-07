@@ -1,4 +1,5 @@
 mod db;
+pub mod models;
 
 use dashmap::DashMap;
 use std::sync::{atomic::AtomicBool, Arc, RwLock};

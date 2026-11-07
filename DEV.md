@@ -52,11 +52,23 @@
   `db::connect` + `migrate` → 读 `settings.server_url` → `app.manage(state)`。
 - `db.rs`：`connect` / `migrate` / `column_exists` / `ensure_column` / `get_setting`，
   纯函数收 `&SqlitePool`。
-- `models.rs`：待 C03 回填。
+- `models.rs`：7 个对外结构（`Character` / `UserPersona` / `Session` / `Message` /
+  `GroupSession` / `GroupMember` / `GroupMessage`）、4 个输入类型
+  （`CharacterInput` / `UserPersonaInput` / `SessionInput` / `SessionUpdate`，DESIGN 5.6 未给字段，
+  按表「除 id / 时间戳外的列」补全）、`StreamEvent` 6 变体、`ContextInfo`。
+  群聊输入类型、`ConnectionInfo`、`ImportStats` 留到各自首次使用处定义。
+- 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。
 
 ## 5. Tauri 命令语义
 
 （待 C04 起逐个命令回填。全部命令必须在 `lib.rs` 的 `invoke_handler` 注册，坑 #15）
+
+**跨层命名契约**：命令参数由 Tauri 自动把前端 camelCase 映射到 Rust snake_case；
+命令**返回值**由 serde 直接序列化，不会自动转换，因此 `types.ts` 的主数据模型字段保持 snake_case。
+例外是 `StreamEvent`（`tag = "type"`、变体 `snake_case`、字段 `rename_all_fields = "camelCase"`）
+与 `ContextInfo`（`rename_all = "camelCase"`），二者按 DESIGN 6.1 的前端定义输出
+`messageId` / `promptTokens` / `completionTokens` / `isAccurate`。
+`StreamEvent` 不用 `rename_all = "lowercase"`，它会把多词变体拼成一个词（坑 #6）。
 
 ## 6. 前端模块
 
