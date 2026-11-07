@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Toaster } from "./components/Toaster";
 import { CharacterEditPage } from "./pages/CharacterEditPage";
 import { CharacterListPage } from "./pages/CharacterListPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
             <Route path="/characters" element={<CharacterListPage />} />
             <Route path="/characters/new" element={<CharacterEditPage />} />
             <Route path="/characters/:id/edit" element={<CharacterEditPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/characters" replace />} />
           </Routes>
         </main>

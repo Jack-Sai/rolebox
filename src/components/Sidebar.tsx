@@ -6,7 +6,7 @@ const items = [
   { to: "/characters", label: "角色", icon: Users, ready: true },
   { to: "/sessions", label: "单人会话", icon: MessageSquare, ready: false },
   { to: "/groups", label: "群聊", icon: MessagesSquare, ready: false },
-  { to: "/settings", label: "设置", icon: Settings, ready: false },
+  { to: "/settings", label: "设置", icon: Settings, ready: true },
 ] as const;
 
 export function Sidebar() {

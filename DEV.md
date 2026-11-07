@@ -105,7 +105,11 @@
 - `pages/CharacterEditPage.tsx`：新建 / 编辑表单 + 右侧预览；后端没有单角色查询命令，
   编辑时复用 `get_characters` 按 id 取回。
 - `store/toast.ts`：Zustand 全局提示；`components/ui/` 为自写基础组件，图标一律 lucide-react。
+- `pages/SettingsPage.tsx`：本期只实现「我的分身」子页签（分身 CRUD）；
+  外观、llama-server、数据页签为禁用占位，分别留到 C40 / C46。
 - 样式：Tailwind v4 由 `@tailwindcss/vite` 插件加载，`src/index.css` 定义 CSS 变量。
+- `src/test/setup.ts` 显式注册 `afterEach(cleanup)`：vitest 未开 `globals`，
+  RTL 不会自动清理，否则多个组件测试的 DOM 会叠加（坑 #9 同源）。
 
 ## 7. 测试与验证
 
