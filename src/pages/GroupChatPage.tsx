@@ -3,11 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
+import { MemberBar } from "../components/chat/MemberBar";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { NarrationLine } from "../components/chat/NarrationLine";
 import { SummaryCard } from "../components/chat/SummaryCard";
 import { InputArea } from "../components/chat/InputArea";
-import { Button } from "../components/ui/button";
 import { useToastStore } from "../store/toast";
 import type { GroupMember, GroupMessage, GroupSession, Message } from "../types";
 
@@ -171,21 +171,13 @@ export function GroupChatPage() {
             </p>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {members.map((member) => (
-            <Button
-              key={member.character_id}
-              variant="ghost"
-              disabled={streaming}
-              onClick={() => void handleGenerate(member.character_id)}
-            >
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: member.avatar_color }}
-              />
-              {generatingId === member.character_id ? "生成中…" : member.name}
-            </Button>
-          ))}
+        <div className="mt-2">
+          <MemberBar
+            members={members}
+            generatingId={generatingId}
+            disabled={streaming}
+            onGenerate={(characterId) => void handleGenerate(characterId)}
+          />
         </div>
       </header>
 
