@@ -102,6 +102,7 @@
 | `delete_session` | `id` | `()` | 外键级联删除其消息 |
 | `get_messages` | `session_id` | `Vec<Message>` | 只取 `is_active = 1`，按 id 升序 |
 | `send_user_message` | `session_id, content` | `Message` | **只落库，不触发模型** |
+| `send_narration` | `session_id, content` | `Message` | 旁白，`role = "narration"`，同样不触发模型 |
 | `generate_reply` | `session_id, onChunk` | `Message` | 抢全局 send_lock → 构造 prompt → 流式 → 落库 |
 | `cancel_generation` | `session_id` | `()` | 置 `s:<id>` 的 AtomicBool，流式循环逐 Delta 检查 |
 | `update_message` | `id, content` | `()` | 原地改内容，并把之后的消息标 `deprecated = 1` |

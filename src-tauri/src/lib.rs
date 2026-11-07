@@ -72,6 +72,7 @@ pub fn run() {
             handlers::delete_session,
             handlers::get_messages,
             handlers::send_user_message,
+            handlers::send_narration,
             handlers::generate_reply,
             handlers::cancel_generation,
             handlers::update_message,

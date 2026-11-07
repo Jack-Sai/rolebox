@@ -146,6 +146,18 @@ pub async fn send_user_message(
     db::get_message(&state.pool, id).await
 }
 
+/// 发送旁白，只落库 role = "narration"，同样不触发模型。
+/// 构造上下文时会被转成 user + 【旁白】前缀（format_single_history）。
+#[tauri::command]
+pub async fn send_narration(
+    state: State<'_, AppState>,
+    session_id: i64,
+    content: String,
+) -> Result<Message, String> {
+    let id = db::insert_message(&state.pool, session_id, "narration", &content).await?;
+    db::get_message(&state.pool, id).await
+}
+
 /// 编辑消息：原地改内容，之后的消息标记「上下文已变」——这是用户主动破坏缓存，可接受。
 #[tauri::command]
 pub async fn update_message(
