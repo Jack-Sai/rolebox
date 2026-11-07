@@ -4,6 +4,7 @@ import { ArrowLeft, Minimize2, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
 import { ContextBar } from "../components/chat/ContextBar";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { MessageList } from "../components/chat/MessageList";
 import { InputArea } from "../components/chat/InputArea";
 import { Button } from "../components/ui/button";
@@ -41,6 +42,8 @@ export function ChatPage() {
     Record<number, Message[]>
   >({});
   const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null);
+  // 删除走应用内二次确认：确认框打开期间不碰后端，取消就什么都不会发生。
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   // 上下文用量是增强信息，拿不到就不显示进度条，不打断聊天。
   const loadContext = useCallback(async () => {
@@ -94,17 +97,60 @@ export function ChatPage() {
   }, [load]);
 
   // 稳定回调：不因 ChatPage 的其它状态变化而让子组件收到新函数（坑 #13）。
+  const handleGenerate = async () => {
+    setStreaming(true);
+    setMessages((previous) => [...previous, tempMessage(sessionId)]);
+
+    let cancelled = false;
+    const handler = createStreamHandler({
+      onAppend: (text) => {
+        setMessages((previous) =>
+          previous.map((item) =>
+            item.id === TEMP_ID
+              ? { ...item, content: item.content + text }
+              : item,
+          ),
+        );
+      },
+      onDone: (message) => {
+        setMessages((previous) =>
+          previous.map((item) => (item.id === TEMP_ID ? message : item)),
+        );
+      },
+      onError: (message) => show(`生成失败：${message}`),
+      onCancelled: () => {
+        cancelled = true;
+      },
+    });
+
+    try {
+      const message = await api.generateReply(sessionId, handler);
+      // 取消时后端只发 Cancelled 不发 Done，用命令返回值补齐真实 id。
+      setMessages((previous) =>
+        previous.map((item) => (item.id === TEMP_ID ? message : item)),
+      );
+    } catch (cause) {
+      setMessages((previous) => previous.filter((item) => item.id !== TEMP_ID));
+      if (!cancelled) show(`生成失败：${String(cause)}`);
+    } finally {
+      setStreaming(false);
+      // 生成结束后真实 prompt_tokens 已经写进 AppState，刷新进度条。
+      void loadContext();
+    }
+  };
+
   const onSend = useCallback(
-    (content: string) => {
-      void api
-        .sendUserMessage(sessionId, content)
-        .then((message) => {
-          // 只追加，不重建已有对象：历史消息引用稳定是 React.memo 生效的前提（坑 #12）。
-          setMessages((previous) => [...previous, message]);
-        })
-        .catch((cause) => show(`发送失败：${String(cause)}`));
+    async (content: string) => {
+      try {
+        const message = await api.sendUserMessage(sessionId, content);
+        setMessages((previous) => [...previous, message]);
+        // 单人模式：发送后立即让模型响应，不再需要点「生成回复」。
+        void handleGenerate();
+      } catch (cause) {
+        show(`发送失败：${String(cause)}`);
+      }
     },
-    [sessionId, show],
+    [sessionId, show, handleGenerate],
   );
 
   const onSendNarration = useCallback(
@@ -135,20 +181,20 @@ export function ChatPage() {
     [load, show],
   );
 
-  const onDeleteMessage = useCallback(
-    (id: number) => {
-      if (
-        !window.confirm("确定删除这条消息？之后的消息会标记为「上下文已变」。")
-      ) {
-        return;
-      }
-      void api
-        .deleteMessage(id)
-        .then(() => load())
-        .catch((cause) => show(`删除失败：${String(cause)}`));
-    },
-    [load, show],
-  );
+  // 只打开确认框，绝不在这里调用 delete_message。
+  const onDeleteMessage = useCallback((id: number) => {
+    setPendingDeleteId(id);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    const id = pendingDeleteId;
+    if (id === null) return;
+    setPendingDeleteId(null);
+    void api
+      .deleteMessage(id)
+      .then(() => load())
+      .catch((cause) => show(`删除失败：${String(cause)}`));
+  }, [pendingDeleteId, load, show]);
 
   // 用 ref 读最新列表，避免 onActivateVersion 依赖 messages 导致回调每次渲染都变（坑 #13）。
   const messagesRef = useRef<Message[]>([]);
@@ -212,55 +258,13 @@ export function ChatPage() {
     [load, show],
   );
 
-  const handleGenerate = async () => {
-    setStreaming(true);
-    setMessages((previous) => [...previous, tempMessage(sessionId)]);
-
-    let cancelled = false;
-    const handler = createStreamHandler({
-      onAppend: (text) => {
-        setMessages((previous) =>
-          previous.map((item) =>
-            item.id === TEMP_ID
-              ? { ...item, content: item.content + text }
-              : item,
-          ),
-        );
-      },
-      onDone: (message) => {
-        setMessages((previous) =>
-          previous.map((item) => (item.id === TEMP_ID ? message : item)),
-        );
-      },
-      onError: (message) => show(`生成失败：${message}`),
-      onCancelled: () => {
-        cancelled = true;
-      },
-    });
-
-    try {
-      const message = await api.generateReply(sessionId, handler);
-      // 取消时后端只发 Cancelled 不发 Done，用命令返回值补齐真实 id。
-      setMessages((previous) =>
-        previous.map((item) => (item.id === TEMP_ID ? message : item)),
-      );
-    } catch (cause) {
-      setMessages((previous) => previous.filter((item) => item.id !== TEMP_ID));
-      if (!cancelled) show(`生成失败：${String(cause)}`);
-    } finally {
-      setStreaming(false);
-      // 生成结束后真实 prompt_tokens 已经写进 AppState，刷新进度条。
-      void loadContext();
-    }
-  };
-
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-6 py-3">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-6 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            className="text-gray-500 hover:text-gray-800"
+            className="text-[var(--text-muted)] hover:text-[var(--text)]"
             onClick={() => navigate("/sessions")}
             aria-label="返回会话列表"
           >
@@ -270,7 +274,7 @@ export function ChatPage() {
             <h1 className="truncate font-medium">
               {session?.title ?? "加载中…"}
             </h1>
-            <p className="truncate text-xs text-gray-500">
+            <p className="truncate text-xs text-[var(--text-muted)]">
               {character?.name ?? ""}
               {session?.scenario ? ` · ${session.scenario}` : ""}
             </p>
@@ -305,11 +309,11 @@ export function ChatPage() {
       )}
 
       <main className="min-h-0 flex-1 overflow-y-auto p-6">
-        {error && <p className="text-sm text-red-600">加载失败：{error}</p>}
+        {error && <p className="text-sm text-[var(--destructive)]">加载失败：{error}</p>}
         {!error && messages.length === 0 && (
-          <p className="text-center text-sm text-gray-500">
-            还没有消息。发一句话，再点「生成回复」。
-          </p>
+            <p className="text-center text-sm text-[var(--text-muted)]">
+              还没有消息。发一句话，模型会立即回复。
+            </p>
         )}
         <MessageList
           messages={messages}
@@ -321,7 +325,7 @@ export function ChatPage() {
         />
       </main>
 
-      <footer className="shrink-0 border-t border-gray-200 bg-white p-4">
+      <footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-4">
         <InputArea
           onSend={onSend}
           onSendNarration={onSendNarration}
@@ -329,6 +333,16 @@ export function ChatPage() {
           streaming={streaming}
         />
       </footer>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="删除这条消息？"
+        description="之后的消息会标记为「上下文已变」。"
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDeleteId(null)}
+      />
     </div>
   );
 }

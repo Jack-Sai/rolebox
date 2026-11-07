@@ -35,7 +35,7 @@ describe("MessageList", () => {
     expect(screen.getByText("你好")).toBeTruthy();
   });
 
-  it("旁白消息渲染为 NarrationLine 而不是普通气泡", () => {
+  it("旁白消息渲为可编辑、删除的普通气泡，和正常消息一样", () => {
     const narration = {
       ...base,
       id: 2,
@@ -44,9 +44,11 @@ describe("MessageList", () => {
     };
     render(<MessageList messages={[narration]} />);
 
-    expect(screen.getByTestId("narration-line")).toBeTruthy();
+    expect(screen.getByTestId("bubble-2")).toBeTruthy();
     expect(screen.getByText(/窗外下雨了/)).toBeTruthy();
-    expect(screen.queryByTestId("bubble-2")).toBeNull();
+    expect(screen.queryByTestId("narration-line")).toBeNull();
+    expect(screen.getByLabelText("编辑")).toBeTruthy();
+    expect(screen.getByLabelText("删除")).toBeTruthy();
   });
 
   it("摘要消息渲染为 SummaryCard 而不是普通气泡", () => {

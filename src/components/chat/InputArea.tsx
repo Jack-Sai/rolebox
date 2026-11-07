@@ -51,6 +51,10 @@ export function InputArea({
     } else if (action === "stop" && streaming) {
       event.preventDefault();
       onStop?.();
+    } else if (event.key === "Enter" && !event.shiftKey) {
+      // 普通回车发送；Shift+Enter 留给 textarea 原生换行。
+      event.preventDefault();
+      submit();
     }
   };
 
@@ -64,7 +68,7 @@ export function InputArea({
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={narration ? "输入旁白…" : "输入消息…"}
-          className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+          className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none text-[var(--text)] focus:border-indigo-500"
         />
         <button
           type="button"
@@ -73,8 +77,8 @@ export function InputArea({
           className={cn(
             "flex items-center gap-1 rounded px-2 py-1 text-xs",
             narration
-              ? "bg-amber-100 text-amber-800"
-              : "text-gray-500 hover:bg-gray-100",
+              ? "bg-[var(--muted-bg)] text-[var(--text-muted)]"
+              : "text-[var(--text-muted)] hover:bg-[var(--surface-hover)]",
           )}
         >
           <Quote size={12} />
