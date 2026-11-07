@@ -64,7 +64,21 @@
 
 ## 5. Tauri 命令语义
 
-（待 C04 起逐个命令回填。全部命令必须在 `lib.rs` 的 `invoke_handler` 注册，坑 #15）
+已注册命令（全部在 `lib.rs` 的 `invoke_handler` 中，坑 #15）：
+
+| 命令 | 参数 | 返回 | 语义 |
+|---|---|---|---|
+| `greet` | `name` | `String` | 脚手架示例，保留作注册完整性测试的扫描样本 |
+| `get_characters` | — | `Vec<Character>` | 按 id 升序列出角色 |
+| `create_character` | `input` | `Character` | 新增后回读整行 |
+| `update_character` | `id, input` | `()` | 覆盖 name / tagline / persona / avatar_color |
+| `delete_character` | `id` | `()` | 外键级联删除其 sessions / messages / group_members |
+| `get_personas` | — | `Vec<UserPersona>` | 按 id 升序列出分身 |
+| `create_persona` | `input` | `UserPersona` | 新增后回读 |
+| `update_persona` | `id, input` | `()` | 覆盖 name / persona |
+| `delete_persona` | `id` | `()` | 关联会话 `user_persona_id` 置 NULL |
+
+命令层只做转发，不做业务判断；统一 `Result<T, String>`。
 
 **命令注册完整性**（坑 #15）：`lib.rs` 的 `command_registry_tests::every_tauri_command_is_registered`
 用 `include_str!` 扫描 `handlers.rs` 中所有 `#[tauri::command]` 函数名，
@@ -72,7 +86,8 @@
 新增命令必须同步加到注册列表，否则该单测失败。
 
 **跨层命名契约**：命令参数由 Tauri 自动把前端 camelCase 映射到 Rust snake_case；
-命令**返回值**由 serde 直接序列化，不会自动转换，因此 `types.ts` 的主数据模型字段保持 snake_case。
+命令**返回值**由 serde 直接序列化，不会自动转换，因此 `types.ts` 的主数据模型字段保持 snake_case；
+嵌套 `input` 对象的字段同理用 snake_case（如 `avatar_color`），Tauri 只对顶层参数名做 camelCase 映射。
 例外是 `StreamEvent`（`tag = "type"`、变体 `snake_case`、字段 `rename_all_fields = "camelCase"`）
 与 `ContextInfo`（`rename_all = "camelCase"`），二者按 DESIGN 6.1 的前端定义输出
 `messageId` / `promptTokens` / `completionTokens` / `isAccurate`。

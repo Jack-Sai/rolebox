@@ -49,7 +49,17 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![handlers::greet])
+        .invoke_handler(tauri::generate_handler![
+            handlers::greet,
+            handlers::get_characters,
+            handlers::create_character,
+            handlers::update_character,
+            handlers::delete_character,
+            handlers::get_personas,
+            handlers::create_persona,
+            handlers::update_persona,
+            handlers::delete_persona,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
