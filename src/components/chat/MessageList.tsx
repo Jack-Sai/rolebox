@@ -1,0 +1,32 @@
+import { defaultRenderContent, MessageBubble } from "./MessageBubble";
+import type { Message } from "../../types";
+
+export function MessageList({ messages }: { messages: Message[] }) {
+  return (
+    <div className="space-y-3" data-testid="message-list">
+      {messages.map((message) => {
+        // 坑 #4：switch 必须有 default，否则新增 BlockKind 会静默不渲染。
+        switch (message.role) {
+          case "user":
+          case "assistant":
+          case "narration":
+          case "summary":
+            // renderContent 传模块级函数，不用内联箭头（坑 #12 / #13）。
+            return (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                renderContent={defaultRenderContent}
+              />
+            );
+          default:
+            return (
+              <div key={message.id} data-testid="unknown-block">
+                未知消息类型
+              </div>
+            );
+        }
+      })}
+    </div>
+  );
+}

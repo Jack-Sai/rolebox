@@ -1,7 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   Character,
   CharacterInput,
+  Message,
+  Session,
+  SessionInput,
+  StreamEvent,
   UserPersona,
   UserPersonaInput,
 } from "../types";
@@ -19,6 +23,12 @@ export const api = {
 
   deleteCharacter: (id: number) => invoke<void>("delete_character", { id }),
 
+  exportCharacter: (id: number, path: string) =>
+    invoke<void>("export_character", { id, path }),
+
+  importCharacter: (path: string, mode: string) =>
+    invoke<Character>("import_character", { path, mode }),
+
   getPersonas: () => invoke<UserPersona[]>("get_personas"),
 
   createPersona: (input: UserPersonaInput) =>
@@ -29,9 +39,31 @@ export const api = {
 
   deletePersona: (id: number) => invoke<void>("delete_persona", { id }),
 
-  exportCharacter: (id: number, path: string) =>
-    invoke<void>("export_character", { id, path }),
+  getSessions: (characterId: number) =>
+    invoke<Session[]>("get_sessions", { characterId }),
 
-  importCharacter: (path: string, mode: string) =>
-    invoke<Character>("import_character", { path, mode }),
+  getSession: (id: number) => invoke<Session>("get_session", { id }),
+
+  createSession: (input: SessionInput) =>
+    invoke<Session>("create_session", { input }),
+
+  deleteSession: (id: number) => invoke<void>("delete_session", { id }),
+
+  getMessages: (sessionId: number) =>
+    invoke<Message[]>("get_messages", { sessionId }),
+
+  sendUserMessage: (sessionId: number, content: string) =>
+    invoke<Message>("send_user_message", { sessionId, content }),
+
+  cancelGeneration: (sessionId: number) =>
+    invoke<void>("cancel_generation", { sessionId }),
+
+  generateReply: async (
+    sessionId: number,
+    onChunk: (event: StreamEvent) => void,
+  ): Promise<Message> => {
+    const channel = new Channel<StreamEvent>();
+    channel.onmessage = onChunk;
+    return invoke<Message>("generate_reply", { sessionId, onChunk: channel });
+  },
 };

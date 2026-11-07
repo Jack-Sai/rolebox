@@ -38,6 +38,13 @@ export interface Session {
   updated_at: string;
 }
 
+export interface SessionInput {
+  character_id: number;
+  title: string;
+  scenario: string;
+  user_persona_id: number | null;
+}
+
 export interface Message {
   id: number;
   session_id: number;

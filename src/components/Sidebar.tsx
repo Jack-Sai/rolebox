@@ -4,7 +4,7 @@ import { cn } from "../lib/utils";
 
 const items = [
   { to: "/characters", label: "角色", icon: Users, ready: true },
-  { to: "/sessions", label: "单人会话", icon: MessageSquare, ready: false },
+  { to: "/sessions", label: "单人会话", icon: MessageSquare, ready: true },
   { to: "/groups", label: "群聊", icon: MessagesSquare, ready: false },
   { to: "/settings", label: "设置", icon: Settings, ready: true },
 ] as const;

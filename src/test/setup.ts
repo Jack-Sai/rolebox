@@ -5,6 +5,9 @@ import { cleanup } from "@testing-library/react";
 // 不在这里 mock 业务 api.ts，否则等于把被测逻辑也 mock 掉了。
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
+  Channel: class {
+    onmessage: ((event: unknown) => void) | null = null;
+  },
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

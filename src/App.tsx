@@ -3,6 +3,9 @@ import { Sidebar } from "./components/Sidebar";
 import { Toaster } from "./components/Toaster";
 import { CharacterEditPage } from "./pages/CharacterEditPage";
 import { CharacterListPage } from "./pages/CharacterListPage";
+import { ChatPage } from "./pages/ChatPage";
+import { SessionCreatePage } from "./pages/SessionCreatePage";
+import { SessionListPage } from "./pages/SessionListPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 export default function App() {
@@ -16,6 +19,12 @@ export default function App() {
             <Route path="/characters" element={<CharacterListPage />} />
             <Route path="/characters/new" element={<CharacterEditPage />} />
             <Route path="/characters/:id/edit" element={<CharacterEditPage />} />
+            <Route path="/sessions" element={<SessionListPage />} />
+            <Route
+              path="/sessions/new/:characterId"
+              element={<SessionCreatePage />}
+            />
+            <Route path="/sessions/:id" element={<ChatPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/characters" replace />} />
           </Routes>
