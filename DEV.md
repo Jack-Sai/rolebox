@@ -63,6 +63,10 @@
 - `prompt.rs`：**最关键模块**（铁律一）。`build_single_system_prompt` 按 DESIGN 5.5.1
   模板一次定稿，空值用固定占位、不注入时间/随机/记忆；与前端 `lib/prompt.ts` 逐字一致，
   两边单测共用同一份期望字符串防止漂移。
+  `format_single_history` 把消息转成 `Vec<ChatMessage>`：第一条固定 system，
+  summary 移到 system 之后（物理 id 最大但语义在开头），narration 转 `user` + `【旁白】`，
+  单人 user/assistant 都不加名字前缀，跳过 `summarized = 1`。
+  `ChatMessage` 实际定义在 prompt.rs（C11 先于 C12），provider.rs 会重导出。
 - `export.rs`：单角色 JSON 的编解码纯函数 + 文件读写；`encode_character` /
   `decode_character` 不碰文件系统，便于验证格式与一致性。
 - 布尔字段：DB 为 `INTEGER`，跨层契约统一为 `bool`，映射在 `db.rs` 查询里完成。
