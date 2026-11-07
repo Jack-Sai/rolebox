@@ -462,6 +462,45 @@ pub async fn mark_deprecated_after(
     Ok(())
 }
 
+/// 同一 version_group 的全部版本，按 id 升序（旧的在前）。
+pub async fn list_versions(
+    pool: &SqlitePool,
+    version_group: i64,
+) -> Result<Vec<Message>, String> {
+    let rows = sqlx::query(&format!(
+        "SELECT {MESSAGE_COLUMNS} FROM messages WHERE version_group = ? ORDER BY id"
+    ))
+    .bind(version_group)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("查询版本失败：{e}"))?;
+    rows.iter().map(message_from_row).collect()
+}
+
+/// 切换激活版本：同一 group 内先全置 0 再置目标为 1。
+/// 必须事务化，否则中途失败会留下「一条都没有 is_active」的组。
+pub async fn activate_version(pool: &SqlitePool, message_id: i64) -> Result<(), String> {
+    let message = get_message(pool, message_id).await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("开启事务失败：{e}"))?;
+    sqlx::query("UPDATE messages SET is_active = 0 WHERE version_group = ?")
+        .bind(message.version_group)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("清空激活版本失败：{e}"))?;
+    sqlx::query("UPDATE messages SET is_active = 1 WHERE id = ?")
+        .bind(message_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("激活版本失败：{e}"))?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("提交事务失败：{e}"))?;
+    Ok(())
+}
+
 pub async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, String> {
     sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
         .bind(key)
@@ -928,5 +967,99 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert!(list[1].deprecated);
         assert_eq!(list[1].content, "二");
+    }
+
+    /// 直接插一个指定 version_group / is_active 的版本，用于构造多版本场景。
+    async fn insert_version(
+        pool: &SqlitePool,
+        session_id: i64,
+        content: &str,
+        version_group: i64,
+        is_active: bool,
+    ) -> i64 {
+        let result = sqlx::query(
+            "INSERT INTO messages (session_id, role, content, version_group, is_active) VALUES (?, 'assistant', ?, ?, ?)",
+        )
+        .bind(session_id)
+        .bind(content)
+        .bind(version_group)
+        .bind(is_active as i64)
+        .execute(pool)
+        .await
+        .unwrap();
+        result.last_insert_rowid()
+    }
+
+    #[tokio::test]
+    async fn list_versions_returns_all_versions_in_id_order() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "assistant", "版本一")
+            .await
+            .unwrap();
+        insert_version(&pool, session_id, "版本二", first, false).await;
+
+        let versions = list_versions(&pool, first).await.unwrap();
+        assert_eq!(versions.len(), 2);
+        assert_eq!(versions[0].content, "版本一");
+        assert_eq!(versions[1].content, "版本二");
+        assert!(versions[0].is_active);
+        assert!(!versions[1].is_active);
+    }
+
+    #[tokio::test]
+    async fn activate_version_leaves_exactly_one_active() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "assistant", "版本一")
+            .await
+            .unwrap();
+        let second = insert_version(&pool, session_id, "版本二", first, false).await;
+
+        activate_version(&pool, second).await.unwrap();
+
+        let versions = list_versions(&pool, first).await.unwrap();
+        let active: Vec<_> = versions.iter().filter(|item| item.is_active).collect();
+        assert_eq!(active.len(), 1, "每个 group 恰好一条 is_active");
+        assert_eq!(active[0].id, second);
+    }
+
+    #[tokio::test]
+    async fn activate_version_rejects_missing_message() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "assistant", "版本一")
+            .await
+            .unwrap();
+
+        assert!(activate_version(&pool, 99999).await.is_err());
+
+        // 失败不应留下任何副作用。
+        let versions = list_versions(&pool, first).await.unwrap();
+        assert_eq!(versions.iter().filter(|item| item.is_active).count(), 1);
+        assert!(versions[0].is_active);
+    }
+
+    #[tokio::test]
+    async fn list_versions_is_scoped_to_one_group() {
+        let pool = seeded_pool().await;
+        let session_id = session_with_character(&pool, "甲").await;
+        let first = insert_message(&pool, session_id, "assistant", "甲组一")
+            .await
+            .unwrap();
+        insert_version(&pool, session_id, "甲组二", first, false).await;
+        let other = insert_message(&pool, session_id, "assistant", "乙组一")
+            .await
+            .unwrap();
+
+        let first_versions = list_versions(&pool, first).await.unwrap();
+        assert_eq!(first_versions.len(), 2);
+        assert!(first_versions
+            .iter()
+            .all(|item| item.version_group == first));
+
+        let other_versions = list_versions(&pool, other).await.unwrap();
+        assert_eq!(other_versions.len(), 1);
+        assert_eq!(other_versions[0].content, "乙组一");
     }
 }
