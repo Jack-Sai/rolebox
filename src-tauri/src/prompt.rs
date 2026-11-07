@@ -23,7 +23,7 @@ pub fn build_single_system_prompt(
         .unwrap_or("（用户未指定身份）");
 
     [
-        format!("【身份】你是{}。{}。", character.name, character.tagline),
+        format!("【身份】你是{}，{}。", character.name, character.tagline),
         format!(
             "你只扮演{}，绝对不要替用户说话，不要描写用户的动作和心理。",
             character.name
@@ -38,10 +38,14 @@ pub fn build_single_system_prompt(
         "【用户】".to_string(),
         user_text.to_string(),
         String::new(),
+        "【纪律约束】".to_string(),
+        "- 严禁输出思考过程、推理痕迹、meta 说明或任何非角色内容".to_string(),
+        "- 不得主动发起对话，仅在用户输入后回应".to_string(),
+        "- 始终保持角色人设，不得以模型或助手身份自述".to_string(),
+        String::new(),
         "【格式规则】".to_string(),
         "- 你的所有发言直接书写，不要加 [角色名]: 前缀".to_string(),
         "- 动作、神态、心理用圆括号（）描写".to_string(),
-        "- 电子消息（短信、聊天记录等）用方括号【】表示".to_string(),
         "- 不输出思考过程，不输出任何 meta 说明或旁白".to_string(),
     ]
     .join("\n")
@@ -151,7 +155,6 @@ pub fn build_group_system_prompt(
         "- 每次只扮演被指定的一个角色，只输出该角色的台词和动作",
         "- 你的发言会被加上 [角色名]: 前缀，所以你**不要**自己加前缀",
         "- 动作、神态、心理用圆括号（）描写",
-        "- 电子消息（短信、聊天记录等）用方括号【】表示",
         "- 你可以回应其他角色，也可以只回应用户",
         "- 绝对不要替用户或其他角色说话",
         "- 不输出思考过程，不输出任何 meta 说明或旁白",
@@ -302,7 +305,7 @@ mod tests {
     }
 
     /// 与前端 lib/prompt.test.ts 使用同一份期望字符串，防止两边模板漂移。
-    const EXPECTED_EMPTY: &str = "【身份】你是甲。一句话。\n\
+    const EXPECTED_EMPTY: &str = "【身份】你是甲，一句话。\n\
 你只扮演甲，绝对不要替用户说话，不要描写用户的动作和心理。\n\
 \n\
 【完整设定】\n\
@@ -314,10 +317,14 @@ mod tests {
 【用户】\n\
 （用户未指定身份）\n\
 \n\
+【纪律约束】\n\
+- 严禁输出思考过程、推理痕迹、meta 说明或任何非角色内容\n\
+- 不得主动发起对话，仅在用户输入后回应\n\
+- 始终保持角色人设，不得以模型或助手身份自述\n\
+\n\
 【格式规则】\n\
 - 你的所有发言直接书写，不要加 [角色名]: 前缀\n\
 - 动作、神态、心理用圆括号（）描写\n\
-- 电子消息（短信、聊天记录等）用方括号【】表示\n\
 - 不输出思考过程，不输出任何 meta 说明或旁白";
 
     #[test]
