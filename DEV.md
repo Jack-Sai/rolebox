@@ -117,6 +117,21 @@
 | `activate_message_version` | `message_id` | `()` | 事务内整组清 0 再置目标为 1 |
 | `get_context_info` | `session_id` | `ContextInfo` | `used` 优先用上次请求的真实 `prompt_tokens`，否则按字符估算 |
 | `compress_context` | `session_id` | `()` | 保留最近 4 条，其余生成摘要并原子落库；也抢 `send_lock` |
+| `get_group_sessions` | — | `Vec<GroupSession>` | 按 id 升序 |
+| `create_group_session` | `input` | `GroupSession` | 建群与写成员同一事务；至少要一个角色 |
+| `delete_group_session` | `id` | `()` | 级联删除成员与消息 |
+| `get_group_members` | `group_id` | `Vec<GroupMember>` | JOIN `characters` 取名字与头像色 |
+| `get_group_messages` | `group_id` | `Vec<GroupMessage>` | 只取激活版本，按 `version_group, id` 排序 |
+| `send_group_user_message` | `group_id, content` | `GroupMessage` | 只落库，不触发模型 |
+| `send_group_narration` | `group_id, content` | `GroupMessage` | 同上，`role = "narration"` |
+| `generate_group_reply` | `group_id, characterId, onChunk` | `GroupMessage` | 指定发言人，抢 `send_lock`，落库前清掉自加前缀 |
+| `cancel_group_generation` | `group_id` | `()` | `g:<id>` 取消键 |
+
+**群聊流式**：`StreamEvent` 新增 `DoneGroup` 变体，载荷是 `GroupMessage`（带 `character_id`）。
+DESIGN 8.1 只定义了单人版 `Done { message: Message }`，两种消息类型无法共用同一个字段。
+`g:<id>` 与 `s:<id>` 前缀区分，避免单人 / 群聊取消串键。
+群聊 prompt 里 `assistant` 与 `user` 都加 `[名字]:` 前缀，当前轮发言指示只用 `append_turn_instruction`
+加在末尾、不落库。
 
 `ContextInfo.isAccurate`：`used` 来自真实 usage 时为 `true`；按字符估算时为 `false`。
 `limit` 取 `/props` 的 `n_ctx`，拿不到回落 4096。真实 usage 在 `stream_chat` 的 on_usage 里

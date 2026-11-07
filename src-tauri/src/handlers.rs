@@ -5,9 +5,10 @@
 use crate::db;
 use crate::export;
 use crate::models::{
-    Character, CharacterInput, ContextInfo, Message, Session, SessionInput, StreamEvent,
-    UserPersona, UserPersonaInput,
+    Character, CharacterInput, ContextInfo, GroupMember, GroupMessage, GroupSession,
+    GroupSessionInput, Message, Session, SessionInput, StreamEvent, UserPersona, UserPersonaInput,
 };
+use std::collections::HashMap;
 use crate::prompt;
 use crate::provider;
 use crate::stream::Usage;
@@ -331,6 +332,185 @@ pub async fn compress_context(
     Ok(())
 }
 
+/// 群聊取消键：与单人的 `s:<id>` 共用一个 DashMap，前缀必须区分（DESIGN 坑 #25 同源）。
+pub fn group_cancel_key(group_id: i64) -> String {
+    format!("g:{group_id}")
+}
+
+#[tauri::command]
+pub async fn get_group_sessions(state: State<'_, AppState>) -> Result<Vec<GroupSession>, String> {
+    db::list_group_sessions(&state.pool).await
+}
+
+#[tauri::command]
+pub async fn create_group_session(
+    state: State<'_, AppState>,
+    input: GroupSessionInput,
+) -> Result<GroupSession, String> {
+    db::create_group_session(&state.pool, &input).await
+}
+
+#[tauri::command]
+pub async fn delete_group_session(state: State<'_, AppState>, id: i64) -> Result<(), String> {
+    db::delete_group_session(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn get_group_members(
+    state: State<'_, AppState>,
+    group_id: i64,
+) -> Result<Vec<GroupMember>, String> {
+    db::list_group_members(&state.pool, group_id).await
+}
+
+#[tauri::command]
+pub async fn get_group_messages(
+    state: State<'_, AppState>,
+    group_id: i64,
+) -> Result<Vec<GroupMessage>, String> {
+    db::list_group_messages(&state.pool, group_id).await
+}
+
+#[tauri::command]
+pub async fn send_group_user_message(
+    state: State<'_, AppState>,
+    group_id: i64,
+    content: String,
+) -> Result<GroupMessage, String> {
+    let id = db::insert_group_message(&state.pool, group_id, None, "user", &content).await?;
+    db::get_group_message(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn send_group_narration(
+    state: State<'_, AppState>,
+    group_id: i64,
+    content: String,
+) -> Result<GroupMessage, String> {
+    let id = db::insert_group_message(&state.pool, group_id, None, "narration", &content).await?;
+    db::get_group_message(&state.pool, id).await
+}
+
+#[tauri::command]
+pub async fn cancel_group_generation(
+    state: State<'_, AppState>,
+    group_id: i64,
+) -> Result<(), String> {
+    if let Some(flag) = state.cancel_flags.get(&group_cancel_key(group_id)) {
+        flag.store(true, Ordering::SeqCst);
+    }
+    Ok(())
+}
+
+/// 群聊生成：由前端指定这次要谁发言，同样抢全局 send_lock。
+#[tauri::command]
+pub async fn generate_group_reply(
+    state: State<'_, AppState>,
+    group_id: i64,
+    character_id: i64,
+    on_chunk: Channel<StreamEvent>,
+) -> Result<GroupMessage, String> {
+    let _guard = state.send_lock.lock().await;
+
+    let key = group_cancel_key(group_id);
+    let cancel = Arc::new(AtomicBool::new(false));
+    state.cancel_flags.insert(key.clone(), cancel.clone());
+
+    let channel = Arc::new(on_chunk);
+    let result =
+        generate_group_reply_inner(&state, group_id, character_id, channel.clone(), cancel.clone())
+            .await;
+
+    state.cancel_flags.remove(&key);
+    if let Err(error) = &result {
+        if !cancel.load(Ordering::SeqCst) {
+            let _ = channel.send(StreamEvent::Error {
+                message: error.clone(),
+            });
+        }
+    }
+    result
+}
+
+async fn generate_group_reply_inner(
+    state: &AppState,
+    group_id: i64,
+    character_id: i64,
+    channel: Arc<Channel<StreamEvent>>,
+    cancel: Arc<AtomicBool>,
+) -> Result<GroupMessage, String> {
+    let group = db::get_group_session(&state.pool, group_id).await?;
+    let members = db::list_group_members(&state.pool, group_id).await?;
+    if !members
+        .iter()
+        .any(|member| member.character_id == character_id)
+    {
+        return Err("该角色不在这个群聊里".to_string());
+    }
+
+    let persona = match group.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+
+    // 群聊 prompt 需要每个成员的 tagline 当一句话简介，只能逐个查角色（成员通常 2-4 个）。
+    let mut member_rows: Vec<(Character, String)> = Vec::new();
+    let mut name_map: HashMap<i64, String> = HashMap::new();
+    for member in &members {
+        let character = db::get_character(&state.pool, member.character_id).await?;
+        let tagline = character.tagline.clone();
+        name_map.insert(character.id, character.name.clone());
+        member_rows.push((character, tagline));
+    }
+
+    let system_prompt =
+        prompt::build_group_system_prompt(&member_rows, &group.scenario, persona.as_ref());
+    let messages = db::list_group_messages(&state.pool, group_id).await?;
+    let user_name = persona.as_ref().map(|p| p.name.as_str()).unwrap_or("用户");
+    let mut chat_messages =
+        prompt::format_group_history(&system_prompt, &messages, &name_map, user_name);
+
+    let speaker_name = name_map
+        .get(&character_id)
+        .cloned()
+        .unwrap_or_else(|| "该角色".to_string());
+    // 当前轮指示只加在末尾，不写入数据库（DESIGN 5.5.5）。
+    prompt::append_turn_instruction(&mut chat_messages, &speaker_name);
+
+    let (stream_result, text) =
+        stream_chat(state, None, chat_messages, channel.clone(), cancel.clone()).await;
+    let cancelled = cancel.load(Ordering::SeqCst);
+
+    // 模型可能不听话自己加 [名字]: 前缀，落库前清掉（DESIGN 5.5.6）。
+    let cleaned = prompt::strip_role_prefix(&text, &speaker_name);
+    let saved = if cleaned.trim().is_empty() {
+        None
+    } else {
+        let id = db::insert_group_message(
+            &state.pool,
+            group_id,
+            Some(character_id),
+            "assistant",
+            &cleaned,
+        )
+        .await?;
+        Some(db::get_group_message(&state.pool, id).await?)
+    };
+
+    if cancelled {
+        let _ = channel.send(StreamEvent::Cancelled);
+        return saved.ok_or_else(|| "生成已取消且没有可保留的内容".to_string());
+    }
+    if let Err(error) = &stream_result {
+        return Err(error.clone());
+    }
+    let message = saved.ok_or_else(|| "模型未返回任何内容".to_string())?;
+    let _ = channel.send(StreamEvent::DoneGroup {
+        message: message.clone(),
+    });
+    Ok(message)
+}
+
 /// 上下文用量。used 优先用最近一次请求的真实 prompt_tokens（isAccurate = true），
 /// 否则按字符数估算（isAccurate = false）。
 #[tauri::command]
@@ -393,7 +573,8 @@ pub async fn generate_reply(
 /// 三个生成入口共用：拿模型名、发 Start、跑 SSE、返回 (流结果, 累积文本)。
 async fn stream_chat(
     state: &AppState,
-    session_id: i64,
+    // 单人会话传 Some(session_id) 用于上下文用量缓存；群聊传 None（避免和 session_id 撞键）。
+    usage_key: Option<i64>,
     chat_messages: Vec<prompt::ChatMessage>,
     channel: Arc<Channel<StreamEvent>>,
     cancel: Arc<AtomicBool>,
@@ -421,7 +602,9 @@ async fn stream_chat(
     // 真实 usage 记进 AppState，上下文进度条优先用它（比按字符估算准）。
     let last_usage = state.last_usage.clone();
     let on_usage = move |usage: Usage| {
-        last_usage.insert(session_id, usage.prompt_tokens);
+        if let Some(key) = usage_key {
+            last_usage.insert(key, usage.prompt_tokens);
+        }
         let _ = usage_channel.send(StreamEvent::Usage {
             prompt_tokens: usage.prompt_tokens,
             completion_tokens: usage.completion_tokens,
@@ -478,7 +661,7 @@ async fn generate_reply_inner(
     let chat_messages = build_single_context(state, &session).await?;
     let (stream_result, text) = stream_chat(
         state,
-        session_id,
+        Some(session_id),
         chat_messages,
         channel.clone(),
         cancel.clone(),
@@ -543,7 +726,7 @@ async fn regenerate_inner(
 
     let (stream_result, text) = stream_chat(
         state,
-        session.id,
+        Some(session.id),
         chat_messages,
         channel.clone(),
         cancel.clone(),
@@ -588,7 +771,7 @@ async fn regenerate_inner(
 
 #[cfg(test)]
 mod tests {
-    use super::{cancel_key, estimate_tokens};
+    use super::{cancel_key, estimate_tokens, group_cancel_key};
     use crate::models::Message;
 
     fn message(content: &str) -> Message {
@@ -624,5 +807,13 @@ mod tests {
         assert_eq!(cancel_key(7), "s:7");
         assert!(cancel_key(7).starts_with("s:"));
         assert!(!cancel_key(7).starts_with("g:"));
+    }
+
+    #[test]
+    fn group_cancel_key_uses_g_prefix() {
+        assert_eq!(group_cancel_key(7), "g:7");
+        assert!(!group_cancel_key(7).starts_with("s:"));
+        // 同一个 id 在单人和群聊里不能撞键，否则取消会串。
+        assert_ne!(cancel_key(7), group_cancel_key(7));
     }
 }

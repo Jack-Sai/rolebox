@@ -85,6 +85,15 @@ pub fn run() {
             handlers::activate_message_version,
             handlers::get_context_info,
             handlers::compress_context,
+            handlers::get_group_sessions,
+            handlers::create_group_session,
+            handlers::delete_group_session,
+            handlers::get_group_members,
+            handlers::get_group_messages,
+            handlers::send_group_user_message,
+            handlers::send_group_narration,
+            handlers::generate_group_reply,
+            handlers::cancel_group_generation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

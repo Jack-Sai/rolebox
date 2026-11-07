@@ -128,6 +128,9 @@ pub enum StreamEvent {
     Delta { content: String },
     Usage { prompt_tokens: u32, completion_tokens: u32 },
     Done { message: Message },
+    /// 群聊的收尾事件：消息类型是 GroupMessage（带 character_id）。
+    /// DESIGN 8.1 只定义了单人版 Done，这里按需要补一个变体。
+    DoneGroup { message: GroupMessage },
     Error { message: String },
     Cancelled,
 }
