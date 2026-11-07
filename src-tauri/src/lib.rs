@@ -145,6 +145,9 @@ pub fn run() {
             handlers::get_settings,
             handlers::set_server_url,
             handlers::test_connection,
+            handlers::export_backup,
+            handlers::import_backup,
+            handlers::export_session_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

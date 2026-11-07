@@ -352,6 +352,26 @@ mod tests {
         assert!(archive.by_name("README.txt").is_ok());
     }
 
+    #[test]
+    fn session_text_renders_txt_and_md() {
+        let messages = vec![
+            ("用户".to_string(), "你好".to_string()),
+            ("甲".to_string(), "（点头）你好".to_string()),
+            ("旁白".to_string(), "下雨了".to_string()),
+        ];
+
+        let txt = render_session_text("初遇", "甲", "雨天", &messages, "txt").unwrap();
+        assert!(txt.contains("角色：甲"));
+        assert!(txt.contains("[甲] （点头）你好"));
+
+        let md = render_session_text("初遇", "甲", "雨天", &messages, "md").unwrap();
+        assert!(md.starts_with("# 初遇"));
+        assert!(md.contains("**甲**：（点头）你好"));
+        assert!(md.contains("*【旁白】下雨了*"));
+
+        assert!(render_session_text("t", "c", "", &[], "pdf").is_err());
+    }
+
     #[tokio::test]
     async fn decode_rejects_wrong_type() {
         let pool = test_pool().await;

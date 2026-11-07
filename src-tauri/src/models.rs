@@ -160,6 +160,17 @@ pub struct BackupData {
     pub settings: std::collections::HashMap<String, String>,
 }
 
+/// 导入完成后的各表条数，让界面能给出「恢复了多少」的反馈。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportStats {
+    pub characters: u32,
+    pub user_personas: u32,
+    pub sessions: u32,
+    pub messages: u32,
+    pub group_sessions: u32,
+}
+
 /// 连接测试结果（前端 types.ts 用 camelCase）。
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]

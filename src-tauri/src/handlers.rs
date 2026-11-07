@@ -6,7 +6,8 @@ use crate::db;
 use crate::export;
 use crate::models::{
     Character, CharacterInput, ConnectionInfo, ContextInfo, GroupMember, GroupMessage, GroupSession,
-    GroupSessionInput, Message, Session, SessionInput, StreamEvent, UserPersona, UserPersonaInput,
+    GroupSessionInput, ImportStats, Message, Session, SessionInput, StreamEvent, UserPersona,
+    UserPersonaInput,
 };
 use std::collections::HashMap;
 use crate::prompt;
@@ -387,6 +388,74 @@ pub async fn test_connection(state: State<'_, AppState>) -> Result<ConnectionInf
         model,
         ctx_length,
     })
+}
+
+#[tauri::command]
+pub async fn export_backup(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    export::export_backup_to_path(&state.pool, &path).await
+}
+
+/// 覆盖式导入。导入后要把 settings 里的 server_url 重新灌回内存，否则界面还在用旧地址。
+#[tauri::command]
+pub async fn import_backup(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<ImportStats, String> {
+    export::import_backup_from_path(&state.pool, &path).await?;
+
+    if let Some(url) = db::get_setting(&state.pool, "server_url").await? {
+        if let Ok(mut config) = state.config.write() {
+            config.server_url = url;
+        }
+    }
+
+    Ok(ImportStats {
+        characters: db::list_characters(&state.pool).await?.len() as u32,
+        user_personas: db::list_personas(&state.pool).await?.len() as u32,
+        sessions: db::list_all_sessions(&state.pool).await?.len() as u32,
+        messages: db::list_all_messages(&state.pool).await?.len() as u32,
+        group_sessions: db::list_group_sessions(&state.pool).await?.len() as u32,
+    })
+}
+
+#[tauri::command]
+pub async fn export_session_text(
+    state: State<'_, AppState>,
+    session_id: i64,
+    format: String,
+    path: String,
+) -> Result<(), String> {
+    let session = db::get_session(&state.pool, session_id).await?;
+    let character = db::get_character(&state.pool, session.character_id).await?;
+    let persona = match session.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+    let user_name = persona.as_ref().map(|p| p.name.as_str()).unwrap_or("用户");
+
+    let messages = db::list_messages(&state.pool, session_id).await?;
+    let pairs: Vec<(String, String)> = messages
+        .iter()
+        .map(|item| {
+            let name = match item.role.as_str() {
+                "assistant" => character.name.clone(),
+                "narration" => "旁白".to_string(),
+                "summary" => "摘要".to_string(),
+                _ => user_name.to_string(),
+            };
+            (name, item.content.clone())
+        })
+        .collect();
+
+    let text = export::render_session_text(
+        &session.title,
+        &character.name,
+        &session.scenario,
+        &pairs,
+        &format,
+    )?;
+    std::fs::write(&path, text).map_err(|e| format!("写入文件失败：{e}"))?;
+    Ok(())
 }
 
 /// 群聊取消键：与单人的 `s:<id>` 共用一个 DashMap，前缀必须区分（DESIGN 坑 #25 同源）。
