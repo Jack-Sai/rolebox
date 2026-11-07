@@ -99,6 +99,9 @@ export const api = {
 
   setServerUrl: (url: string) => invoke<void>("set_server_url", { url }),
 
+  setMaxOutputTokens: (maxOutputTokens: number) =>
+    invoke<void>("set_max_output_tokens", { maxOutputTokens }),
+
   testConnection: () => invoke<ConnectionInfo>("test_connection"),
 
   exportBackup: (path: string) => invoke<void>("export_backup", { path }),

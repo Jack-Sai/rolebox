@@ -194,11 +194,16 @@ function ServerPanel() {
   const [url, setUrl] = useState("");
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [maxOutputTokens, setMaxOutputTokens] = useState(300);
+  const saveMax = useSettingsStore((state) => state.setMaxOutputTokens);
 
   useEffect(() => {
     void api
       .getSettings()
-      .then((config) => setUrl(config.server_url))
+      .then((config) => {
+        setUrl(config.server_url);
+        setMaxOutputTokens(config.max_output_tokens);
+      })
       .catch(() => setUrl(""));
   }, []);
 
@@ -206,6 +211,16 @@ function ServerPanel() {
     try {
       await api.setServerUrl(url);
       show("地址已保存");
+    } catch (cause) {
+      show(`保存失败：${String(cause)}`);
+    }
+  };
+
+  const saveMaxTokens = async () => {
+    try {
+      await api.setMaxOutputTokens(maxOutputTokens);
+      saveMax(maxOutputTokens);
+      show("最大输出长度已保存");
     } catch (cause) {
       show(`保存失败：${String(cause)}`);
     }
@@ -242,8 +257,24 @@ function ServerPanel() {
           placeholder="http://127.0.0.1:8080"
         />
       </label>
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">最大输出长度（字数，0=不限制）</span>
+        <Input
+          type="number"
+          min={0}
+          value={maxOutputTokens}
+          onChange={(event) =>
+            setMaxOutputTokens(Number.parseInt(event.target.value, 10) || 0)
+          }
+          placeholder="300"
+        />
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+          默认 300 个 token（约 150 中文字）。设为 0 不限制。
+        </p>
+      </label>
       <div className="flex gap-2">
         <Button onClick={() => void save()}>保存地址</Button>
+        <Button onClick={() => void saveMaxTokens()}>保存输出长度</Button>
         <Button variant="ghost" onClick={() => void test()} disabled={testing}>
           <CheckCircle2 size={16} />
           {testing ? "测试中…" : "测试连接"}

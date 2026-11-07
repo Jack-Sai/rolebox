@@ -114,6 +114,7 @@ export interface ImportStats {
 
 export interface AppConfig {
   server_url: string;
+  max_output_tokens: number;
 }
 
 export interface ConnectionInfo {

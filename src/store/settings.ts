@@ -25,8 +25,10 @@ export function applyTheme(theme: Theme): void {
 interface SettingsState {
   theme: Theme;
   language: Language;
+  maxOutputTokens: number;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
+  setMaxOutputTokens: (n: number) => void;
 }
 
 // 外观设置只存 localStorage（DESIGN 12），不入库。
@@ -35,11 +37,13 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       theme: "system",
       language: "zh",
+      maxOutputTokens: 300,
       setTheme: (theme) => {
         applyTheme(theme);
         set({ theme });
       },
       setLanguage: (language) => set({ language }),
+      setMaxOutputTokens: (maxOutputTokens) => set({ maxOutputTokens }),
     }),
     {
       name: "rolebox-settings",
