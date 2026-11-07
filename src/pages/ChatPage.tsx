@@ -95,6 +95,18 @@ export function ChatPage() {
     [sessionId, show],
   );
 
+  const onSendNarration = useCallback(
+    (content: string) => {
+      void api
+        .sendNarration(sessionId, content)
+        .then((message) => {
+          setMessages((previous) => [...previous, message]);
+        })
+        .catch((cause) => show(`发送旁白失败：${String(cause)}`));
+    },
+    [sessionId, show],
+  );
+
   const onStop = useCallback(() => {
     void api
       .cancelGeneration(sessionId)
@@ -262,6 +274,7 @@ export function ChatPage() {
       <footer className="shrink-0 border-t border-gray-200 bg-white p-4">
         <InputArea
           onSend={onSend}
+          onSendNarration={onSendNarration}
           onStop={onStop}
           streaming={streaming}
         />

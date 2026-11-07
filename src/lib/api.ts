@@ -55,6 +55,9 @@ export const api = {
   sendUserMessage: (sessionId: number, content: string) =>
     invoke<Message>("send_user_message", { sessionId, content }),
 
+  sendNarration: (sessionId: number, content: string) =>
+    invoke<Message>("send_narration", { sessionId, content }),
+
   cancelGeneration: (sessionId: number) =>
     invoke<void>("cancel_generation", { sessionId }),
 

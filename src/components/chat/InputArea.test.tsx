@@ -26,6 +26,30 @@ describe("InputArea", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it("打开旁白模式后发送走 onSendNarration", () => {
+    const onSend = vi.fn();
+    const onSendNarration = vi.fn();
+    render(<InputArea onSend={onSend} onSendNarration={onSendNarration} />);
+
+    fireEvent.click(screen.getByText("旁白模式"));
+    const input = screen.getByLabelText("消息内容") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "窗外下雨了" } });
+    fireEvent.click(screen.getByText("发送"));
+
+    expect(onSendNarration).toHaveBeenCalledWith("窗外下雨了");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("旁白开关的 aria-pressed 反映当前模式", () => {
+    render(<InputArea onSend={vi.fn()} onSendNarration={vi.fn()} />);
+
+    const toggle = screen.getByText("旁白模式");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("流式期间发送按钮变为停止并调用 onStop", () => {
     const onStop = vi.fn();
     render(<InputArea onSend={vi.fn()} onStop={onStop} streaming />);
