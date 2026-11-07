@@ -16,7 +16,7 @@ use std::sync::Arc;
 ///   其余可通过 server 启动参数（`--chat-template` 选非思考模板）关闭。
 /// 思考开启会占用大量上下文且明显变慢，因此默认关闭。
 #[derive(Serialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Thinking {
     Disabled,
     Enabled { budget: Option<u32> },
@@ -43,6 +43,9 @@ pub struct ChatRequest {
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Thinking>,
+    /// 最大输出 token 数。None 表示不限制（由 server 决定）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }
 
 /// 抽成纯函数，才能在不起 llama-server 的情况下断言「没有采样参数」。
@@ -61,6 +64,9 @@ pub fn build_request_body(req: &ChatRequest) -> Value {
     );
     if let Some(thinking) = &req.thinking {
         body.insert("thinking".into(), serde_json::to_value(thinking).unwrap());
+    }
+    if let Some(max_tokens) = req.max_tokens {
+        body.insert("max_tokens".into(), Value::Number(max_tokens.into()));
     }
     Value::Object(body)
 }
@@ -191,6 +197,7 @@ mod tests {
             }],
             stream: true,
             thinking: None,
+            max_tokens: None,
         }
     }
 

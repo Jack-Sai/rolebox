@@ -317,6 +317,7 @@ pub async fn compress_context(
             messages: prompt::build_summary_prompt(&pairs),
             stream: true,
             thinking,
+            max_tokens: None,
         },
         Arc::new(AtomicBool::new(false)),
         move |text| {
@@ -352,6 +353,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<AppConfig, Strin
         .map_err(|_| "读取配置失败".to_string())?;
     Ok(AppConfig {
         server_url: config.server_url.clone(),
+        max_output_tokens: config.max_output_tokens,
     })
 }
 
@@ -364,6 +366,21 @@ pub async fn set_server_url(state: State<'_, AppState>, url: String) -> Result<(
         .write()
         .map_err(|_| "写入配置失败".to_string())?;
     config.server_url = normalized;
+    Ok(())
+}
+
+/// 设置最大输出 token 数，0 表示不限制。
+#[tauri::command]
+pub async fn set_max_output_tokens(
+    state: State<'_, AppState>,
+    max_output_tokens: u32,
+) -> Result<(), String> {
+    db::set_setting(&state.pool, "max_output_tokens", &max_output_tokens.to_string()).await?;
+    let mut config = state
+        .config
+        .write()
+        .map_err(|_| "写入配置失败".to_string())?;
+    config.max_output_tokens = max_output_tokens;
     Ok(())
 }
 
@@ -734,6 +751,16 @@ async fn stream_chat(
     let model = provider::fetch_model_name(&state.http, &base)
         .await
         .unwrap_or_else(|_| "local-model".to_string());
+    // 最大输出长度：0 表示不限制，由 server 决定。
+    let max_output_tokens = match state.config.read() {
+        Ok(config) => config.max_output_tokens,
+        Err(_) => 0,
+    };
+    let max_tokens = if max_output_tokens > 0 {
+        Some(max_output_tokens)
+    } else {
+        None
+    };
 
     let _ = channel.send(StreamEvent::Start { message_id: 0 });
 
@@ -767,6 +794,7 @@ async fn stream_chat(
             messages: chat_messages,
             stream: true,
             thinking,
+            max_tokens,
         },
         cancel.clone(),
         on_delta,

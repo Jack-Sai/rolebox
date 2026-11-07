@@ -14,6 +14,8 @@ pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8080";
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AppConfig {
     pub server_url: String,
+    /// 默认最大输出 token 数（约对应中文字数的 1.5~2 倍），0 表示不限制。
+    pub max_output_tokens: u32,
 }
 
 pub struct AppState {
@@ -41,10 +43,15 @@ pub fn run() {
 
             let db_path = data_dir.join("rolebox.db");
             // connect 与读设置在同一个 block_on 里完成，避免连接池跨 runtime 边界。
-            let (pool, server_url) = tauri::async_runtime::block_on(async {
+            let (pool, server_url, max_output_tokens) = tauri::async_runtime::block_on(async {
                 let pool = db::connect(&db_path).await?;
                 let url = db::get_setting(&pool, "server_url").await?;
-                Ok::<_, String>((pool, url.unwrap_or_else(|| DEFAULT_SERVER_URL.to_string())))
+                let max_output_tokens: u32 = db::get_setting(&pool, "max_output_tokens")
+                    .await?
+                    .unwrap_or_else(|| "300".to_string())
+                    .parse()
+                    .unwrap_or(300);
+                Ok::<_, String>((pool, url.unwrap_or_else(|| DEFAULT_SERVER_URL.to_string()), max_output_tokens))
             })
             .map_err(std::io::Error::other)?;
 
@@ -54,7 +61,7 @@ pub fn run() {
                 send_lock: tokio::sync::Mutex::new(()),
                 cancel_flags: DashMap::new(),
                 last_usage: Arc::new(DashMap::new()),
-                config: RwLock::new(AppConfig { server_url }),
+                config: RwLock::new(AppConfig { server_url, max_output_tokens }),
             });
 
             // 系统托盘：关闭窗口只隐藏，真正退出走菜单（DESIGN 5.1 第 6 条）。
@@ -146,6 +153,7 @@ pub fn run() {
             handlers::cancel_group_generation,
             handlers::get_settings,
             handlers::set_server_url,
+            handlers::set_max_output_tokens,
             handlers::test_connection,
             handlers::export_backup,
             handlers::import_backup,
