@@ -73,3 +73,19 @@ describe("MessageBubble 消息操作", () => {
     expect(writeText).toHaveBeenCalledWith("你好");
   });
 });
+
+describe("MessageBubble 过期标记", () => {
+  it("deprecated 消息显示上下文已变提示", () => {
+    render(<MessageBubble message={{ ...message, deprecated: true }} />);
+
+    const mark = screen.getByTestId("deprecated-mark");
+    // 语义断言：抓「上下文 / 过期 / 已变」概念，不锁死文案（坑 #11）。
+    expect(mark.textContent).toMatch(/上下文|过期|已变/);
+  });
+
+  it("未过期消息不显示该提示", () => {
+    render(<MessageBubble message={message} />);
+
+    expect(screen.queryByTestId("deprecated-mark")).toBeNull();
+  });
+});
