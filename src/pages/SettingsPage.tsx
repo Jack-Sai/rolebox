@@ -16,10 +16,10 @@ import {
 import { useToastStore } from "../store/toast";
 import type { UserPersona, UserPersonaInput } from "../types";
 
-type TabKey = "personas" | "server" | "appearance" | "data";
+type TabKey = "personas" | "server" | "appearance" | "data" | "developer";
 
 // 文案在 i18n 字典的 settings.tabs 里，key 与 TabKey 对齐。
-const TAB_KEYS: TabKey[] = ["personas", "server", "appearance", "data"];
+const TAB_KEYS: TabKey[] = ["personas", "server", "appearance", "data", "developer"];
 
 const THEMES: { value: Theme; label: string }[] = [
   { value: "system", label: "跟随系统" },
@@ -445,6 +445,40 @@ function DataPanel() {
   );
 }
 
+function DeveloperPanel() {
+  const t = useI18n();
+  const developerMode = useSettingsStore((state) => state.developerMode);
+  const setDeveloperMode = useSettingsStore((state) => state.setDeveloperMode);
+
+  return (
+    <div className="space-y-4">
+      <header>
+        <h2 className="font-medium">{t.settings.developer.title}</h2>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+          {t.settings.developer.hint}
+        </p>
+      </header>
+      <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+        <span className="text-sm">会话内显示「查看 System Prompt」按钮</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={developerMode}
+          onClick={() => setDeveloperMode(!developerMode)}
+          className={cn(
+            "rounded-lg border px-3 py-1.5 text-sm",
+            developerMode
+              ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+              : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]",
+          )}
+        >
+          {developerMode ? t.common.on : t.common.off}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const [tab, setTab] = useState<TabKey>("personas");
   const t = useI18n();
@@ -477,6 +511,7 @@ export function SettingsPage() {
           {tab === "server" && <ServerPanel />}
           {tab === "appearance" && <AppearancePanel />}
           {tab === "data" && <DataPanel />}
+          {tab === "developer" && <DeveloperPanel />}
         </section>
       </div>
     </div>

@@ -26,24 +26,28 @@ interface SettingsState {
   theme: Theme;
   language: Language;
   maxOutputTokens: number;
+  developerMode: boolean;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
   setMaxOutputTokens: (n: number) => void;
+  setDeveloperMode: (enabled: boolean) => void;
 }
 
-// 外观设置只存 localStorage（DESIGN 12），不入库。
+// 外观与开发者开关都只存 localStorage（DESIGN 12），不入库。
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       theme: "system",
       language: "zh",
       maxOutputTokens: 0,
+      developerMode: false,
       setTheme: (theme) => {
         applyTheme(theme);
         set({ theme });
       },
       setLanguage: (language) => set({ language }),
       setMaxOutputTokens: (maxOutputTokens) => set({ maxOutputTokens }),
+      setDeveloperMode: (developerMode) => set({ developerMode }),
     }),
     {
       name: "rolebox-settings",

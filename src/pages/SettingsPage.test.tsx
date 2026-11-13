@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { SettingsPage } from "./SettingsPage";
+import { useSettingsStore } from "../store/settings";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
@@ -18,6 +19,7 @@ beforeEach(() => {
   mockedInvoke.mockReset();
   // 同一测试文件内 jsdom 的 localStorage 是共享的（坑 #9）。
   localStorage.clear();
+  useSettingsStore.setState({ developerMode: false });
 });
 
 describe("SettingsPage 我的分身", () => {
@@ -107,5 +109,25 @@ describe("SettingsPage 数据页签", () => {
         path: "/tmp/rolebox-backup.zip",
       });
     });
+  });
+});
+
+describe("SettingsPage 开发者页签", () => {
+  it("开启开发者模式后写入 store", async () => {
+    mockedInvoke.mockImplementation(async (command: string) => {
+      if (command === "get_personas") return [];
+      return null;
+    });
+
+    render(<SettingsPage />);
+    fireEvent.click(screen.getByText("开发者"));
+
+    expect(
+      await screen.findByRole("heading", { name: "开发者模式" }),
+    ).toBeTruthy();
+    expect(useSettingsStore.getState().developerMode).toBe(false);
+
+    fireEvent.click(screen.getByRole("switch"));
+    expect(useSettingsStore.getState().developerMode).toBe(true);
   });
 });

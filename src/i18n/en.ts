@@ -7,6 +7,8 @@ const en: typeof zh = {
     delete: "Delete",
     create: "New",
     loading: "Loading…",
+    on: "On",
+    off: "Off",
   },
   nav: {
     characters: "Characters",
@@ -21,6 +23,16 @@ const en: typeof zh = {
       server: "llama-server",
       appearance: "Appearance",
       data: "Data",
+      developer: "Developer",
+    },
+    developer: {
+      title: "Developer Mode",
+      hint: "When enabled, a “View System Prompt” button appears in solo and group chats so you can preview and copy the prompt actually sent to the model.",
+      previewTitle: "System Prompt",
+      previewHint: "This is the system prompt actually sent to the model for this session; it never changes after creation.",
+      copy: "Copy",
+      copied: "Copied",
+      close: "Close",
     },
     appearance: {
       theme: "Theme",

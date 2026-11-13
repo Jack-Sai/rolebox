@@ -6,6 +6,8 @@ const zh = {
     delete: "删除",
     create: "新建",
     loading: "加载中…",
+    on: "开",
+    off: "关",
   },
   nav: {
     characters: "角色",
@@ -20,6 +22,16 @@ const zh = {
       server: "llama-server",
       appearance: "外观",
       data: "数据",
+      developer: "开发者",
+    },
+    developer: {
+      title: "开发者模式",
+      hint: "开启后，单人会话与群聊页会出现「查看 System Prompt」按钮，可预览并复制实际发送给模型的提示词。",
+      previewTitle: "System Prompt",
+      previewHint: "这是当前会话实际发送给模型的 system prompt，会话创建后不再改变。",
+      copy: "复制",
+      copied: "已复制",
+      close: "关闭",
     },
     appearance: {
       theme: "主题",
