@@ -707,6 +707,52 @@ pub async fn get_context_info(
     })
 }
 
+/// 开发者模式用：返回该单人会话真实会发给模型的 system prompt（与 generate 时一致）。
+/// 直接复用 build_single_system_prompt，是「发给模型什么」的唯一真相来源，不另造前端副本。
+#[tauri::command]
+pub async fn get_session_system_prompt(
+    state: State<'_, AppState>,
+    session_id: i64,
+) -> Result<String, String> {
+    let session = db::get_session(&state.pool, session_id).await?;
+    let character = db::get_character(&state.pool, session.character_id).await?;
+    let persona = match session.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+    Ok(prompt::build_single_system_prompt(
+        &character,
+        &session.scenario,
+        persona.as_ref(),
+    ))
+}
+
+/// 开发者模式用：返回该群聊真实会发给模型的 system prompt（与 generate 时一致）。
+#[tauri::command]
+pub async fn get_group_system_prompt(
+    state: State<'_, AppState>,
+    group_id: i64,
+) -> Result<String, String> {
+    let group = db::get_group_session(&state.pool, group_id).await?;
+    let members = db::list_group_members(&state.pool, group_id).await?;
+    let persona = match group.user_persona_id {
+        Some(id) => Some(db::get_persona(&state.pool, id).await?),
+        None => None,
+    };
+    // 与 generate_group_reply_inner 一致：每个成员取角色 + tagline 当一句话简介。
+    let mut member_rows: Vec<(Character, String)> = Vec::new();
+    for member in &members {
+        let character = db::get_character(&state.pool, member.character_id).await?;
+        let tagline = character.tagline.clone();
+        member_rows.push((character, tagline));
+    }
+    Ok(prompt::build_group_system_prompt(
+        &member_rows,
+        &group.scenario,
+        persona.as_ref(),
+    ))
+}
+
 /// 触发生成。全局一把 send_lock：llama-server 单 slot，会话间并发会互相踩 KV cache。
 #[tauri::command]
 pub async fn generate_reply(

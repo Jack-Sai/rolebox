@@ -158,6 +158,8 @@ pub fn run() {
             handlers::export_backup,
             handlers::import_backup,
             handlers::export_session_text,
+            handlers::get_session_system_prompt,
+            handlers::get_group_system_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
