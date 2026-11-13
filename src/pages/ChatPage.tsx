@@ -5,10 +5,12 @@ import { api } from "../lib/api";
 import { createStreamHandler } from "../lib/stream";
 import { ContextBar } from "../components/chat/ContextBar";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { PromptPreviewDialog } from "../components/ui/PromptPreviewDialog";
 import { MessageList } from "../components/chat/MessageList";
 import { InputArea } from "../components/chat/InputArea";
 import { Button } from "../components/ui/button";
 import { useToastStore } from "../store/toast";
+import { useSettingsStore } from "../store/settings";
 import type { Character, ContextInfo, Message, Session } from "../types";
 
 // DESIGN 8.3：流式期间用 id < 0 的临时消息，Done 后换成真实 id。
@@ -44,6 +46,10 @@ export function ChatPage() {
   const [contextInfo, setContextInfo] = useState<ContextInfo | null>(null);
   // 删除走应用内二次确认：确认框打开期间不碰后端，取消就什么都不会发生。
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  // 开发者模式：预览当前会话的 system prompt。
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewText, setPreviewText] = useState("");
+  const developerMode = useSettingsStore((state) => state.developerMode);
 
   // 上下文用量是增强信息，拿不到就不显示进度条，不打断聊天。
   const loadContext = useCallback(async () => {
@@ -235,6 +241,16 @@ export function ChatPage() {
     }
   };
 
+  // 开发者模式：拉取并弹窗展示实际会发给模型的 system prompt。
+  const openPromptPreview = async () => {
+    try {
+      setPreviewText(await api.getSessionSystemPrompt(sessionId));
+      setPreviewOpen(true);
+    } catch (cause) {
+      show(`预览失败：${String(cause)}`);
+    }
+  };
+
   const onRegenerate = useCallback(
     (messageId: number) => {
       setStreaming(true);
@@ -281,6 +297,11 @@ export function ChatPage() {
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
+          {developerMode && (
+            <Button variant="ghost" onClick={() => void openPromptPreview()}>
+              查看 System Prompt
+            </Button>
+          )}
           <Button
             variant="ghost"
             onClick={() => void handleCompress()}
@@ -342,6 +363,12 @@ export function ChatPage() {
         danger
         onConfirm={confirmDelete}
         onCancel={() => setPendingDeleteId(null)}
+      />
+
+      <PromptPreviewDialog
+        open={previewOpen}
+        prompt={previewText}
+        onClose={() => setPreviewOpen(false)}
       />
     </div>
   );

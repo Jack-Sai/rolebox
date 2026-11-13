@@ -111,6 +111,13 @@ export const api = {
   exportSessionText: (sessionId: number, format: string, path: string) =>
     invoke<void>("export_session_text", { sessionId, format, path }),
 
+  // 开发者模式预览用：返回该会话实际会发给模型的 system prompt。
+  getSessionSystemPrompt: (sessionId: number) =>
+    invoke<string>("get_session_system_prompt", { sessionId }),
+
+  getGroupSystemPrompt: (groupId: number) =>
+    invoke<string>("get_group_system_prompt", { groupId }),
+
   getGroupSessions: () => invoke<GroupSession[]>("get_group_sessions"),
 
   createGroupSession: (input: GroupSessionInput) =>

@@ -9,7 +9,10 @@ import { NarrationLine } from "../components/chat/NarrationLine";
 import { SummaryCard } from "../components/chat/SummaryCard";
 import { InputArea } from "../components/chat/InputArea";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { PromptPreviewDialog } from "../components/ui/PromptPreviewDialog";
+import { Button } from "../components/ui/button";
 import { useToastStore } from "../store/toast";
+import { useSettingsStore } from "../store/settings";
 import type { GroupMember, GroupMessage, GroupSession, Message } from "../types";
 
 const TEMP_ID = -1;
@@ -56,6 +59,10 @@ export function GroupChatPage() {
   const [error, setError] = useState<string | null>(null);
   // 群聊删除走应用内二次确认：确认框打开期间不碰后端，取消就什么都不会发生。
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  // 开发者模式：预览当前群聊的 system prompt。
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewText, setPreviewText] = useState("");
+  const developerMode = useSettingsStore((state) => state.developerMode);
 
   const load = useCallback(async () => {
     try {
@@ -128,6 +135,16 @@ export function GroupChatPage() {
       .catch((cause) => show(`停止失败：${String(cause)}`));
   }, [groupId, show]);
 
+  // 开发者模式：拉取并弹窗展示实际会发给模型的 system prompt。
+  const openPromptPreview = useCallback(async () => {
+    try {
+      setPreviewText(await api.getGroupSystemPrompt(groupId));
+      setPreviewOpen(true);
+    } catch (cause) {
+      show(`预览失败：${String(cause)}`);
+    }
+  }, [groupId, show]);
+
   const handleGenerate = async (characterId: number) => {
     setStreaming(true);
     setGeneratingId(characterId);
@@ -181,23 +198,30 @@ export function GroupChatPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-6 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <button
-            type="button"
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
-            onClick={() => navigate("/groups")}
-            aria-label="返回群聊列表"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="min-w-0">
-            <h1 className="truncate font-medium">
-              {group?.title ?? "加载中…"}
-            </h1>
-            <p className="truncate text-xs text-[var(--text-muted)]">
-              {group?.scenario ?? ""}
-            </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              className="text-[var(--text-muted)] hover:text-[var(--text)]"
+              onClick={() => navigate("/groups")}
+              aria-label="返回群聊列表"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div className="min-w-0">
+              <h1 className="truncate font-medium">
+                {group?.title ?? "加载中…"}
+              </h1>
+              <p className="truncate text-xs text-[var(--text-muted)]">
+                {group?.scenario ?? ""}
+              </p>
+            </div>
           </div>
+          {developerMode && (
+            <Button variant="ghost" onClick={() => void openPromptPreview()}>
+              查看 System Prompt
+            </Button>
+          )}
         </div>
         <div className="mt-2">
           <MemberBar
@@ -284,6 +308,12 @@ export function GroupChatPage() {
         danger
         onConfirm={confirmDeleteGroupMessage}
         onCancel={() => setPendingDeleteId(null)}
+      />
+
+      <PromptPreviewDialog
+        open={previewOpen}
+        prompt={previewText}
+        onClose={() => setPreviewOpen(false)}
       />
     </div>
   );
